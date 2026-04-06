@@ -1,0 +1,57 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+
+# Archivos generados por Flutter
+*.g.dart
+*.freezed.dart
+
+# Android
+*.class
+*.jar
+*.ap_
+local.properties
+.gradle/
+.gradle_home/
+android/.gradle/
+android/local.properties
+android/captures/
+android/app/debug/
+android/app/profile/
+android/app/release/
+.android/
+*.iml
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework/
+ios/Flutter/Flutter.podspec
+ios/.generated/
+ios/Flutter/App.framework/
+ios/Flutter/ephemeral/
+
+# Web
+web/
+
+# macOS / Linux / Windows
+linux/
+windows/
+macos/
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Otros
+TEST*.xml
+.gradle_home/
