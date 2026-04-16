@@ -611,6 +611,19 @@ class DatabaseService {
         .clamp(0.0, double.infinity);
   }
 
+  /// Dinero disponible para gastar o ahorrar considerando el historial completo.
+  /// = Suma de la porción no-necesidades de todos los ingresos registrados
+  ///   − saldo actual comprometido en fondos de ahorro
+  ///   − total histórico de pagos de deuda.
+  /// Este valor nunca se resetea al cambiar de período.
+  static double getTotalDisponible() {
+    final totalNoNecesidades =
+        _ingresos.values.fold(0.0, (s, i) => s + i.gastos);
+    final savings  = getTotalSavingsBalance();
+    final deudaPagada = _pagos.values.fold(0.0, (s, p) => s + p.amount);
+    return (totalNoNecesidades - savings - deudaPagada).clamp(0.0, double.infinity);
+  }
+
   /// Dinero disponible para ahorro y pago de deudas en el período actual.
   /// Equivale al % de Ahorro y Deudas del ingreso, menos lo ya comprometido.
   static double getAhorroDisponible() {

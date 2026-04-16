@@ -37,7 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _needsPctCtrl  = TextEditingController(text: DatabaseService.getNeedsPercent().toString());
     _wantsPctCtrl  = TextEditingController(text: DatabaseService.getWantsPercent().toString());
     _frequency     = DatabaseService.getFrequency();
-    _templates     = Map.from(DatabaseService.getFondoItemTemplates());
+    _templates     = Map.from(DatabaseService.getPlantillasPartidas());
 
     _bankNameCtrl.addListener(_markChanged);
     _needsPctCtrl.addListener(_markChanged);
@@ -85,7 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await DatabaseService.setNeedsPercent(needsPct);
     await DatabaseService.setWantsPercent(wantsPct);
     await DatabaseService.setFrequency(_frequency);
-    await DatabaseService.setFondoItemTemplates(_templates);
+    await DatabaseService.setPlantillasPartidas(_templates);
     setState(() {
       _saving    = false;
       _hasChanges = false;
@@ -526,18 +526,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Total partidas',
-                        style: RefugioTextStyles.label.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: RefugioTheme.primary,
+                      Expanded(
+                        child: Text(
+                          'Total partidas',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: RefugioTextStyles.label.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: RefugioTheme.primary,
+                          ),
                         ),
                       ),
-                      Text(
-                        _currencyFormat.format(templatesTotal),
-                        style: RefugioTextStyles.body.copyWith(
-                          color: RefugioTheme.primary,
-                          fontWeight: FontWeight.w700,
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          _currencyFormat.format(templatesTotal),
+                          maxLines: 1,
+                          textAlign: TextAlign.right,
+                          overflow: TextOverflow.ellipsis,
+                          style: RefugioTextStyles.body.copyWith(
+                            color: RefugioTheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ],

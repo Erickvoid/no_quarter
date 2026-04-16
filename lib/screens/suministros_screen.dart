@@ -286,13 +286,13 @@ class _SuministrosScreenState extends State<SuministrosScreen> {
                 children: [
                   _buildSplitChip(
                     'Necesidades',
-                    _currencyFormat.format(income.fondoIntocable),
+                    _currencyFormat.format(income.necesidades),
                     RefugioTheme.amber,
                   ),
                   const SizedBox(width: 8),
                   _buildSplitChip(
                     'Disponible',
-                    _currencyFormat.format(income.capitalLibre),
+                    _currencyFormat.format(income.gastos),
                     RefugioTheme.primary,
                   ),
                 ],

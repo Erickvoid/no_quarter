@@ -40,8 +40,8 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
     final saldoTotal            = DatabaseService.getSaldoTotal();
     final necesidadesCubiertas  = DatabaseService.isNecesidadesCubiertas();
     final necesidadesAsignadas  = DatabaseService.getNecesidadesAsignadas();
-    final gastosDisponibles     = DatabaseService.getGastosDisponibles();
-    final totalDeuda            = DatabaseService.getTotalDebtRemaining();
+    final totalDisponible = DatabaseService.getTotalDisponible();
+    final totalDeuda      = DatabaseService.getTotalDebtRemaining();
     final totalPartidas         = _partidas.fold(0.0, (s, i) => s + i.targetAmount);
     final needsPct        = DatabaseService.getNeedsPercent();
     final wantsPct        = DatabaseService.getWantsPercent();
@@ -133,15 +133,15 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
 
           // ── Disponible ──
           RefugioCard(
-            borderColor: capitalLibre > 0 ? RefugioTheme.primary : RefugioTheme.amber,
+            borderColor: totalDisponible > 0 ? RefugioTheme.primary : RefugioTheme.amber,
             headerLabel: 'Disponible',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _currencyFormat.format(capitalLibre),
+                  _currencyFormat.format(totalDisponible),
                   style: RefugioTextStyles.moneyLarge.copyWith(
-                    color: capitalLibre > 0 ? RefugioTheme.primary : RefugioTheme.amber,
+                    color: totalDisponible > 0 ? RefugioTheme.primary : RefugioTheme.amber,
                     fontSize: 28,
                   ),
                 ),
@@ -201,7 +201,7 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
                   children: [
                     Text('Total de deudas', style: RefugioTextStyles.label.copyWith(color: RefugioTheme.textPrimary)),
                     Text(
-                      _currencyFormat.format(totalDebt),
+                      _currencyFormat.format(totalDeuda),
                       style: RefugioTextStyles.body.copyWith(
                         color: RefugioTheme.salmon,
                         fontWeight: FontWeight.w700,

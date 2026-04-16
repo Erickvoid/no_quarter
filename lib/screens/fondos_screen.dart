@@ -25,7 +25,7 @@ class _FondosScreenState extends State<FondosScreen> {
   Widget build(BuildContext context) {
     final funds = DatabaseService.getAllSavingsFunds();
     final totalSaved = DatabaseService.getTotalSavingsBalance();
-    final ahorroDisponible = DatabaseService.getAhorroDisponible();
+    final ahorroDisponible = DatabaseService.getTotalDisponible();
 
     return Scaffold(
       backgroundColor: RefugioTheme.background,
@@ -430,7 +430,7 @@ class _FondosScreenState extends State<FondosScreen> {
   void _showDepositDialog(SavingsFund fund) {
     final amountCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
-    final ahorroDisponible = DatabaseService.getAhorroDisponible();
+    final ahorroDisponible = DatabaseService.getTotalDisponible();
 
     showDialog(
       context: context,
@@ -451,7 +451,7 @@ class _FondosScreenState extends State<FondosScreen> {
                   Icon(Icons.account_balance_wallet_outlined, size: 14, color: RefugioTheme.primary),
                   const SizedBox(width: 6),
                   Text(
-                    'Para ahorrar (20%): ${_currencyFormat.format(ahorroDisponible)}',
+                    'Disponible para ahorrar: ${_currencyFormat.format(ahorroDisponible)}',
                     style: RefugioTextStyles.label.copyWith(fontSize: 12, color: RefugioTheme.primary),
                   ),
                 ],
@@ -502,7 +502,7 @@ class _FondosScreenState extends State<FondosScreen> {
               if (amount == null || amount <= 0) return;
               if (amount > ahorroDisponible) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Monto supera tu presupuesto de ahorro disponible (20%)')),
+                  const SnackBar(content: Text('Monto supera tu saldo disponible')),
                 );
                 return;
               }

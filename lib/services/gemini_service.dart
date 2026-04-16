@@ -23,9 +23,9 @@ class GeminiService {
   /// Construye el contexto financiero actual del usuario
   static String _buildFinancialContext() {
     final saldo = DatabaseService.getSaldoTotal();
-    final disponible = DatabaseService.getMunicionLibreTotal();
-    final necesidades = DatabaseService.getFondoIntocableThisPeriod();
-    final necesidadesCubiertas = DatabaseService.isFondoAsegurado();
+    final gastosDisponibles = DatabaseService.getGastosDisponibles();
+    final necesidadesAsignadas = DatabaseService.getNecesidadesAsignadas();
+    final necesidadesCubiertas = DatabaseService.isNecesidadesCubiertas();
     final totalDebt = DatabaseService.getTotalDebtRemaining();
     final totalSavings = DatabaseService.getTotalSavingsBalance();
     final fixedExpenses = DatabaseService.getAllFixedExpenses();
@@ -59,8 +59,9 @@ class GeminiService {
     return '''
 ── Resumen Financiero ($frequencyLabel) ──
 Saldo Total $bankName: \$${saldo.toStringAsFixed(2)} MXN
-Necesidades del Hogar ($needsPct%): \$${necesidades.toStringAsFixed(2)} MXN [${necesidadesCubiertas ? "Cubiertas ✓" : "Pendiente ⚠"}]
-Disponible ($wantsPct% gastos + $savingsPct% ahorro/deudas): \$${disponible.toStringAsFixed(2)} MXN
+Necesidades del Hogar ($needsPct%): \$${necesidadesAsignadas.toStringAsFixed(2)} MXN [${necesidadesCubiertas ? "Cubiertas ✓" : "Pendiente ⚠"}]
+Gastos Disponibles ($wantsPct%): \$${gastosDisponibles.toStringAsFixed(2)} MXN
+Ahorro y Deudas ($savingsPct%): \$${DatabaseService.getAhorroDisponible().toStringAsFixed(2)} MXN disponible
 Fondos de Ahorro/Inversión: \$${totalSavings.toStringAsFixed(2)} MXN
 
 ── Deudas (Total: \$${totalDebt.toStringAsFixed(2)} MXN) ──

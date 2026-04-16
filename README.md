@@ -76,7 +76,7 @@ Además, la frecuencia del periodo ahora es configurable:
 - Fondos de ahorro e inversión
 - Depósitos/retiros
 - Historial de movimientos
-- Ajuste de textos y flujo alineado a "Disponible"
+- Flujo alineado a saldo disponible real para ahorrar
 
 ### 6) Info (`lib/screens/info_screen.dart`)
 - Pendientes semanales + gastos fijos pendientes
@@ -130,8 +130,11 @@ Boxes principales:
 
 En `lib/services/database_service.dart`:
 - `getSaldoTotal()`
-- `getFondoIntocableThisPeriod()`
-- `getMunicionLibreTotal()`
+- `getNecesidadesAsignadas()`
+- `isNecesidadesCubiertas()`
+- `getGastosDisponibles()`
+- `getAhorroDisponible()`
+- `getTotalDisponible()`
 - `getCurrentPeriodStart()`
 - `getNeedsPercent()`
 - `getWantsPercent()`
@@ -151,3 +154,4 @@ En `lib/services/database_service.dart`:
 - Resumen mensual y historial de meses anteriores.
 - Ajustes de lenguaje en toda la app (Inicio, Deudas, Historial, Disponible).
 - Gemini actualizado para contexto familiar y reglas de Necesidades del Hogar.
+- Corregido overflow horizontal en Configuracion para pantallas angostas.
