@@ -25,7 +25,7 @@ class _FondosScreenState extends State<FondosScreen> {
   Widget build(BuildContext context) {
     final funds = DatabaseService.getAllSavingsFunds();
     final totalSaved = DatabaseService.getTotalSavingsBalance();
-    final capitalLibre = DatabaseService.getMunicionLibreTotal();
+    final ahorroDisponible = DatabaseService.getAhorroDisponible();
 
     return Scaffold(
       backgroundColor: RefugioTheme.background,
@@ -37,7 +37,7 @@ class _FondosScreenState extends State<FondosScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
           children: [
             // ── Header ──
-            _buildHeader(totalSaved, capitalLibre),
+            _buildHeader(totalSaved, ahorroDisponible),
             const SizedBox(height: 20),
 
             if (funds.isEmpty) _buildEmptyState() else ...[
@@ -67,7 +67,7 @@ class _FondosScreenState extends State<FondosScreen> {
 
   // ── Header ──
 
-  Widget _buildHeader(double total, double capitalLibre) {
+  Widget _buildHeader(double total, double ahorroDisponible) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -77,7 +77,7 @@ class _FondosScreenState extends State<FondosScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Aparta dinero de tu Capital Libre',
+          'Aparta dinero de tu presupuesto de ahorro (20%)',
           style: RefugioTextStyles.subtitle,
         ),
         const SizedBox(height: 16),
@@ -95,8 +95,8 @@ class _FondosScreenState extends State<FondosScreen> {
             Expanded(
               child: _buildStatChip(
                 icon: Icons.account_balance_wallet_outlined,
-                label: 'Capital libre',
-                value: _currencyFormat.format(capitalLibre),
+                label: 'Para ahorrar',
+                value: _currencyFormat.format(ahorroDisponible),
                 color: RefugioTheme.primary,
               ),
             ),
@@ -163,7 +163,7 @@ class _FondosScreenState extends State<FondosScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Crea un fondo de ahorro o inversión\ny empieza a apartar dinero de tu Capital Libre.',
+              'Crea un fondo de ahorro o inversión\ny empieza a apartar dinero de tu presupuesto disponible.',
               textAlign: TextAlign.center,
               style: RefugioTextStyles.body.copyWith(fontSize: 13, color: RefugioTheme.textMuted),
             ),
@@ -430,7 +430,7 @@ class _FondosScreenState extends State<FondosScreen> {
   void _showDepositDialog(SavingsFund fund) {
     final amountCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
-    final capitalLibre = DatabaseService.getMunicionLibreTotal();
+    final ahorroDisponible = DatabaseService.getAhorroDisponible();
 
     showDialog(
       context: context,
@@ -451,7 +451,7 @@ class _FondosScreenState extends State<FondosScreen> {
                   Icon(Icons.account_balance_wallet_outlined, size: 14, color: RefugioTheme.primary),
                   const SizedBox(width: 6),
                   Text(
-                    'Capital libre: ${_currencyFormat.format(capitalLibre)}',
+                    'Para ahorrar (20%): ${_currencyFormat.format(ahorroDisponible)}',
                     style: RefugioTextStyles.label.copyWith(fontSize: 12, color: RefugioTheme.primary),
                   ),
                 ],
@@ -500,9 +500,9 @@ class _FondosScreenState extends State<FondosScreen> {
             onPressed: () async {
               final amount = double.tryParse(amountCtrl.text.trim());
               if (amount == null || amount <= 0) return;
-              if (amount > capitalLibre) {
+              if (amount > ahorroDisponible) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Monto supera tu Capital Libre disponible')),
+                  const SnackBar(content: Text('Monto supera tu presupuesto de ahorro disponible (20%)')),
                 );
                 return;
               }
@@ -658,7 +658,7 @@ class _FondosScreenState extends State<FondosScreen> {
                           context: context,
                           builder: (c) => AlertDialog(
                             title: const Text('Eliminar fondo'),
-                            content: Text('¿Eliminar "${fund.name}"? El saldo regresará a tu Capital Libre.'),
+                            content: Text('¿Eliminar "${fund.name}"? El saldo regresará a tu presupuesto disponible.'),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(c, false),

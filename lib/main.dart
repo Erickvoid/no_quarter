@@ -9,6 +9,7 @@ import 'screens/frentes_de_batalla_screen.dart';
 import 'screens/asistente_tactico_screen.dart';
 import 'screens/fondos_screen.dart';
 import 'screens/info_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -77,11 +78,22 @@ class _RefugioShellState extends State<RefugioShell> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.tune_rounded, size: 20),
+            color: RefugioTheme.textMuted,
+            tooltip: 'Configuración',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SettingsScreen(onSettingsChanged: _refresh),
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: Text(
-                'v1.0',
+                'v1.3',
                 style: TextStyle(
                   fontFamily: RefugioTheme.fontFamily,
                   fontSize: 12,
@@ -116,7 +128,7 @@ class _RefugioShellState extends State<RefugioShell> {
             BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
               activeIcon: Icon(Icons.home_rounded),
-              label: 'Panel',
+              label: 'Inicio',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.account_balance_wallet_outlined),
@@ -126,7 +138,7 @@ class _RefugioShellState extends State<RefugioShell> {
             BottomNavigationBarItem(
               icon: Icon(Icons.receipt_long_outlined),
               activeIcon: Icon(Icons.receipt_long),
-              label: 'Pasivos',
+              label: 'Deudas',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.psychology_outlined),
@@ -141,7 +153,7 @@ class _RefugioShellState extends State<RefugioShell> {
             BottomNavigationBarItem(
               icon: Icon(Icons.info_outline_rounded),
               activeIcon: Icon(Icons.info_rounded),
-              label: 'Info',
+              label: 'Historial',
             ),
           ],
         ),

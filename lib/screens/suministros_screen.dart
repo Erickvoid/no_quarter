@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import '../theme/refugio_theme.dart';
 import '../widgets/tactical_widgets.dart';
 import '../services/database_service.dart';
-import '../models/constants.dart';
 import '../models/income.dart';
 
 /// Pantalla 2: Registro de Ingresos
@@ -46,7 +45,7 @@ class _SuministrosScreenState extends State<SuministrosScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Registro de ingresos',
+          'Registra el dinero que entra al hogar',
           style: RefugioTextStyles.label,
         ),
         const SizedBox(height: 24),
@@ -58,8 +57,8 @@ class _SuministrosScreenState extends State<SuministrosScreen> {
           child: Column(
             children: [
               _buildQuickButton(
-                label: 'Nómina Base',
-                description: 'Depósito semanal estándar',
+                label: 'Sueldo / Nómina',
+                description: 'Pago de nómina o sueldo',
                 icon: Icons.account_balance_wallet_rounded,
                 onTap: () => _showAmountDialog('nomina_base'),
               ),
@@ -77,23 +76,30 @@ class _SuministrosScreenState extends State<SuministrosScreen> {
 
         // ── Distribución ──
         RefugioCard(
-          headerLabel: 'Distribución Automática',
+          headerLabel: '¿Cómo se divide tu dinero?',
           borderColor: RefugioTheme.accent,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildProtocolRow(
-                'Fondo Intocable',
-                _currencyFormat.format(FinancialConstants.bloqueDeTitanio),
+                'Necesidades (${DatabaseService.getNeedsPercent()}%)',
+                '${DatabaseService.getNeedsPercent()}% de cada ingreso',
                 RefugioTheme.amber,
-                'Se asignan automáticamente',
+                'Para gastos esenciales del hogar',
               ),
               const SizedBox(height: 8),
               _buildProtocolRow(
-                'Capital Libre',
-                'Excedente',
+                'Gastos Personales (${DatabaseService.getWantsPercent()}%)',
+                '${DatabaseService.getWantsPercent()}% de cada ingreso',
                 RefugioTheme.primary,
-                'Todo por encima de \$2,810',
+                'Entretenimiento y gustos',
+              ),
+              const SizedBox(height: 8),
+              _buildProtocolRow(
+                'Ahorro y Deudas (${DatabaseService.getSavingsPercent()}%)',
+                '${DatabaseService.getSavingsPercent()}% de cada ingreso',
+                RefugioTheme.cobalt,
+                'Fondos de ahorro y pago de deudas',
               ),
             ],
           ),
@@ -262,7 +268,7 @@ class _SuministrosScreenState extends State<SuministrosScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        isNomina ? 'Nómina Base' : 'Ingreso Extra',
+                        isNomina ? 'Sueldo / Nómina' : 'Ingreso Extra',
                         style: RefugioTextStyles.label.copyWith(color: RefugioTheme.primary),
                       ),
                     ],
@@ -279,14 +285,14 @@ class _SuministrosScreenState extends State<SuministrosScreen> {
               Row(
                 children: [
                   _buildSplitChip(
-                    'Fondo',
-                    _currencyFormat.format(income.bloqueDeTitanio),
+                    'Necesidades',
+                    _currencyFormat.format(income.fondoIntocable),
                     RefugioTheme.amber,
                   ),
                   const SizedBox(width: 8),
                   _buildSplitChip(
-                    'Libre',
-                    _currencyFormat.format(income.municionLibre),
+                    'Disponible',
+                    _currencyFormat.format(income.capitalLibre),
                     RefugioTheme.primary,
                   ),
                 ],
@@ -351,7 +357,7 @@ class _SuministrosScreenState extends State<SuministrosScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(type == 'nomina_base' ? 'Nómina Base' : 'Ingreso Extra'),
+        title: Text(type == 'nomina_base' ? 'Sueldo / Nómina' : 'Ingreso Extra'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -400,7 +406,7 @@ class _SuministrosScreenState extends State<SuministrosScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Se asignarán \$2,810 al Fondo Intocable automáticamente.',
+                      '${DatabaseService.getNeedsPercent()}% necesidades · ${DatabaseService.getWantsPercent()}% gastos · ${DatabaseService.getSavingsPercent()}% ahorro/deudas',
                       style: TextStyle(
                         fontFamily: RefugioTheme.fontFamily,
                         fontSize: 11,
@@ -449,13 +455,12 @@ class _SuministrosScreenState extends State<SuministrosScreen> {
     widget.onIncomeRegistered?.call();
 
     if (mounted) {
-      final fondo = FinancialConstants.bloqueDeTitanio;
-      final libre = (amount - fondo).clamp(0.0, double.infinity);
-
+      final necesidades = amount * DatabaseService.getNeedsPercent() / 100;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Ingreso registrado: \$${amount.toStringAsFixed(2)} · Fondo: \$${fondo.toStringAsFixed(2)} · Libre: \$${libre.toStringAsFixed(2)}',
+            'Ingreso registrado: \$${amount.toStringAsFixed(2)} · '
+            'Necesidades: \$${necesidades.toStringAsFixed(2)}',
           ),
           duration: const Duration(seconds: 3),
         ),

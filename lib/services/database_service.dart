@@ -8,15 +8,16 @@ import '../models/fixed_expense.dart';
 import '../models/constants.dart';
 
 class DatabaseService {
-  static const String _incomeBox = 'incomes';
-  static const String _debtBox = 'debts';
-  static const String _paymentBox = 'payments';
-  static const String _fondoItemsBox = 'fondo_items';
-  static const String _savingsFundsBox = 'savings_funds';
-  static const String _savingsMovementsBox = 'savings_movements';
-  static const String _fixedExpensesBox = 'fixed_expenses';
+  // ── Hive box names (no cambiar — son las claves de almacenamiento real) ──
+  static const String _incomeBox               = 'incomes';
+  static const String _debtBox                 = 'debts';
+  static const String _paymentBox              = 'payments';
+  static const String _partidasBox             = 'fondo_items';
+  static const String _savingsFundsBox         = 'savings_funds';
+  static const String _savingsMovementsBox     = 'savings_movements';
+  static const String _fixedExpensesBox        = 'fixed_expenses';
   static const String _fixedExpensePaymentsBox = 'fixed_expense_payments';
-  static const String _settingsBox = 'settings';
+  static const String _settingsBox             = 'settings';
 
   static final _uuid = Uuid();
 
@@ -25,7 +26,6 @@ class DatabaseService {
   static Future<void> initialize() async {
     await Hive.initFlutter();
 
-    // Register adapters
     Hive.registerAdapter(IncomeAdapter());
     Hive.registerAdapter(DebtCategoryAdapter());
     Hive.registerAdapter(DebtAdapter());
@@ -36,11 +36,10 @@ class DatabaseService {
     Hive.registerAdapter(FixedExpenseAdapter());
     Hive.registerAdapter(FixedExpensePaymentAdapter());
 
-    // Open boxes
     await Hive.openBox<Income>(_incomeBox);
     await Hive.openBox<Debt>(_debtBox);
     await Hive.openBox<DebtPayment>(_paymentBox);
-    await Hive.openBox<FondoItem>(_fondoItemsBox);
+    await Hive.openBox<FondoItem>(_partidasBox);
     await Hive.openBox<SavingsFund>(_savingsFundsBox);
     await Hive.openBox<SavingsMovement>(_savingsMovementsBox);
     await Hive.openBox<FixedExpense>(_fixedExpensesBox);
@@ -50,70 +49,155 @@ class DatabaseService {
 
   // ── Box accessors ──
 
-  static Box<Income> get _incomes => Hive.box<Income>(_incomeBox);
-  static Box<Debt> get _debts => Hive.box<Debt>(_debtBox);
-  static Box<DebtPayment> get _payments => Hive.box<DebtPayment>(_paymentBox);
-  static Box<FondoItem> get _fondoItems => Hive.box<FondoItem>(_fondoItemsBox);
-  static Box<SavingsFund> get _savingsFunds => Hive.box<SavingsFund>(_savingsFundsBox);
-  static Box<SavingsMovement> get _savingsMovements => Hive.box<SavingsMovement>(_savingsMovementsBox);
-  static Box<FixedExpense> get _fixedExpenses => Hive.box<FixedExpense>(_fixedExpensesBox);
-  static Box<FixedExpensePayment> get _fixedExpensePayments =>
-      Hive.box<FixedExpensePayment>(_fixedExpensePaymentsBox);
-  static Box get _settings => Hive.box(_settingsBox);
+  static Box<Income>              get _ingresos          => Hive.box<Income>(_incomeBox);
+  static Box<Debt>                get _deudas            => Hive.box<Debt>(_debtBox);
+  static Box<DebtPayment>         get _pagos             => Hive.box<DebtPayment>(_paymentBox);
+  static Box<FondoItem>           get _partidas          => Hive.box<FondoItem>(_partidasBox);
+  static Box<SavingsFund>         get _fondosAhorro      => Hive.box<SavingsFund>(_savingsFundsBox);
+  static Box<SavingsMovement>     get _movimientosAhorro => Hive.box<SavingsMovement>(_savingsMovementsBox);
+  static Box<FixedExpense>        get _gastosFijos       => Hive.box<FixedExpense>(_fixedExpensesBox);
+  static Box<FixedExpensePayment> get _pagosFijos        => Hive.box<FixedExpensePayment>(_fixedExpensePaymentsBox);
+  static Box                      get _config            => Hive.box(_settingsBox);
 
   static String generateId() => _uuid.v4();
 
-  // ── Week helper ──
+  // ── Config keys ──
 
-  /// Returns the start of the current week (most recent Sunday at 00:00).
-  static DateTime _currentWeekStart() {
-    final now = DateTime.now();
-    return now.subtract(Duration(days: now.weekday % 7));
+  static const String _bankNameKey         = 'cfg_bank_name';
+  static const String _limiteNecesidadesKey = 'cfg_fondo_amount';  // clave legacy preservada
+  static const String _needsPctKey         = 'cfg_needs_percent';
+  static const String _wantsPctKey         = 'cfg_wants_percent';
+  static const String _frequencyKey        = 'cfg_frequency';
+  static const String _plantillasKey       = 'cfg_fondo_templates';
+
+  // ── Configuración: banco ──
+
+  static String getBankName() =>
+      (_config.get(_bankNameKey, defaultValue: 'BBVA') as String?) ?? 'BBVA';
+  static Future<void> setBankName(String name) => setSetting(_bankNameKey, name);
+
+  // ── Configuración: distribución 50/30/20 ──
+
+  /// Porcentaje de Necesidades del Hogar. Default 50, rango 10–90.
+  static int getNeedsPercent() {
+    final val = _config.get(_needsPctKey, defaultValue: 50);
+    return ((val as num?) ?? 50).toInt().clamp(10, 90);
+  }
+  static Future<void> setNeedsPercent(int pct) =>
+      setSetting(_needsPctKey, pct.clamp(10, 90));
+
+  /// Porcentaje de Gastos Personales. Default 30.
+  static int getWantsPercent() {
+    final needs = getNeedsPercent();
+    final val = _config.get(_wantsPctKey, defaultValue: 30);
+    return ((val as num?) ?? 30).toInt().clamp(0, 100 - needs - 5);
+  }
+  static Future<void> setWantsPercent(int pct) =>
+      setSetting(_wantsPctKey, pct.clamp(0, 90));
+
+  /// Porcentaje de Ahorro y Deudas = 100 − necesidades − gastos (calculado).
+  static int getSavingsPercent() =>
+      (100 - getNeedsPercent() - getWantsPercent()).clamp(0, 100);
+
+  /// Límite de necesidades configurado manualmente (config legacy, se mantiene para compatibilidad).
+  static double getLimiteNecesidades() {
+    final val = _config.get(_limiteNecesidadesKey,
+        defaultValue: FinancialConstants.fondoIntocableDefault);
+    return ((val as num?) ?? FinancialConstants.fondoIntocableDefault).toDouble();
+  }
+  static Future<void> setLimiteNecesidades(double monto) =>
+      setSetting(_limiteNecesidadesKey, monto);
+
+  // ── Configuración: frecuencia de ingreso ──
+
+  /// 'weekly' | 'biweekly' | 'monthly'
+  static String getFrequency() =>
+      (_config.get(_frequencyKey, defaultValue: 'weekly') as String?) ?? 'weekly';
+  static Future<void> setFrequency(String freq) => setSetting(_frequencyKey, freq);
+
+  static String getFrequencyLabel() {
+    switch (getFrequency()) {
+      case 'biweekly': return 'Quincenal';
+      case 'monthly':  return 'Mensual';
+      default:         return 'Semanal';
+    }
   }
 
-  static DateTime _currentMonthStart() {
+  // ── Helpers de período ──
+
+  /// Inicio del período financiero actual (domingo de esta semana / quincena / mes).
+  static DateTime getCurrentPeriodStart() {
+    final now = DateTime.now();
+    final hoy = DateTime(now.year, now.month, now.day);
+    switch (getFrequency()) {
+      case 'monthly':
+        return DateTime(now.year, now.month, 1);
+      case 'biweekly':
+        final diasDesdeUltimoDomingo = now.weekday % 7;
+        final ultimoDomingo = hoy.subtract(Duration(days: diasDesdeUltimoDomingo));
+        return ultimoDomingo.subtract(const Duration(days: 7));
+      default: // weekly
+        return hoy.subtract(Duration(days: now.weekday % 7));
+    }
+  }
+
+  /// Inicio de la semana calendario actual (domingo 00:00).
+  /// Se usa para la checklist de partidas y planes semanales de deuda.
+  static DateTime _inicioSemannaActual() {
+    final now = DateTime.now();
+    final hoy = DateTime(now.year, now.month, now.day);
+    return hoy.subtract(Duration(days: now.weekday % 7));
+  }
+
+  static DateTime _inicioMesActual() {
     final now = DateTime.now();
     return DateTime(now.year, now.month, 1);
   }
 
-  static String _monthKey(DateTime date) => '${date.year}-${date.month.toString().padLeft(2, '0')}';
+  static String _clavesMes(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}';
 
-  // ── Income Operations ──
+  // ══════════════════════════════════════════════════════
+  // INGRESOS
+  // ══════════════════════════════════════════════════════
 
-  /// Register a new income. Automatically splits into Bloque de Titanio + Munición Libre.
+  /// Registra un ingreso y lo distribuye según la regla 50/30/20 configurada.
   static Future<Income> registerIncome({
     required double amount,
     required String type,
     String? note,
   }) async {
-    final titanio = FinancialConstants.bloqueDeTitanio;
-    final municion = (amount - titanio).clamp(0.0, double.infinity);
+    final pctNecesidades = getNeedsPercent() / 100.0;
+    final montoNecesidades = amount * pctNecesidades;
+    final montoGastos = amount - montoNecesidades;
 
-    final income = Income(
+    final ingreso = Income(
       id: generateId(),
       amount: amount,
       type: type,
       date: DateTime.now(),
-      bloqueDeTitanio: amount >= titanio ? titanio : amount,
-      municionLibre: municion,
+      necesidades: montoNecesidades,
+      gastos: montoGastos,
       note: note,
     );
 
-    await _incomes.put(income.id, income);
-    return income;
+    await _ingresos.put(ingreso.id, ingreso);
+    return ingreso;
   }
 
   static List<Income> getAllIncomes() {
-    final list = _incomes.values.toList();
+    final list = _ingresos.values.toList();
     list.sort((a, b) => b.date.compareTo(a.date));
     return list;
   }
 
   static Future<void> deleteIncome(String id) async {
-    await _incomes.delete(id);
+    await _ingresos.delete(id);
   }
 
-  // ── Debt Operations ──
+  // ══════════════════════════════════════════════════════
+  // DEUDAS
+  // ══════════════════════════════════════════════════════
 
   static Future<Debt> addDebt({
     required String name,
@@ -123,7 +207,7 @@ class DatabaseService {
     double monthlyPayment = 0,
     double interestRate = 0,
   }) async {
-    final debt = Debt(
+    final deuda = Debt(
       id: generateId(),
       name: name,
       description: description,
@@ -133,79 +217,73 @@ class DatabaseService {
       interestRate: interestRate,
       createdAt: DateTime.now(),
     );
-
-    await _debts.put(debt.id, debt);
-    return debt;
+    await _deudas.put(deuda.id, deuda);
+    return deuda;
   }
 
-  static List<Debt> getAllDebts() {
-    return _debts.values.where((d) => d.isActive).toList();
-  }
+  static List<Debt> getAllDebts() =>
+      _deudas.values.where((d) => d.isActive).toList();
 
-  static List<Debt> getDebtsByCategory(DebtCategory category) {
-    return getAllDebts().where((d) => d.category == category).toList();
-  }
+  static List<Debt> getDebtsByCategory(DebtCategory category) =>
+      getAllDebts().where((d) => d.category == category).toList();
 
   static Future<DebtPayment> makePayment({
     required String debtId,
     required double amount,
     String? note,
   }) async {
-    final debt = _debts.get(debtId);
-    if (debt == null) throw Exception('Deuda no encontrada');
+    final deuda = _deudas.get(debtId);
+    if (deuda == null) throw Exception('Deuda no encontrada');
 
-    debt.paidAmount += amount;
-    debt.lastPaymentDate = DateTime.now();
-    await debt.save();
+    final montoEfectivo = amount.clamp(0.0, deuda.remainingAmount);
+    if (montoEfectivo <= 0) throw Exception('La deuda ya está liquidada');
+    deuda.paidAmount += montoEfectivo;
+    deuda.lastPaymentDate = DateTime.now();
+    await deuda.save();
 
-    final payment = DebtPayment(
+    final pago = DebtPayment(
       id: generateId(),
       debtId: debtId,
-      amount: amount,
+      amount: montoEfectivo,
       date: DateTime.now(),
       note: note,
     );
-
-    await _payments.put(payment.id, payment);
-    return payment;
+    await _pagos.put(pago.id, pago);
+    return pago;
   }
 
-  static List<DebtPayment> getPaymentsForDebt(String debtId) {
-    return _payments.values.where((p) => p.debtId == debtId).toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
-  }
+  static List<DebtPayment> getPaymentsForDebt(String debtId) =>
+      _pagos.values.where((p) => p.debtId == debtId).toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
 
   static Future<void> deleteDebt(String id) async {
-    final debt = _debts.get(id);
-    if (debt != null) {
-      debt.isActive = false;
-      await debt.save();
+    final deuda = _deudas.get(id);
+    if (deuda != null) {
+      deuda.isActive = false;
+      await deuda.save();
     }
   }
 
-  static Future<void> updateDebt(Debt debt) async {
-    await debt.save();
-  }
+  static Future<void> updateDebt(Debt debt) async => await debt.save();
 
-  // Weekly plan per debt (stored in settings)
+  // ── Planes semanales de deuda ──
 
-  static String _weeklyPlanKey(String debtId) => 'weekly_plan_$debtId';
+  static String _clavePlanSemanal(String debtId) => 'weekly_plan_$debtId';
 
   static Future<void> splitDebtIntoWeeklyPlan({
     required String debtId,
     required int weeks,
     required int dueWeekday,
   }) async {
-    final debt = _debts.get(debtId);
-    if (debt == null) throw Exception('Deuda no encontrada');
-    if (weeks <= 0) throw Exception('Semanas inválidas');
+    final deuda = _deudas.get(debtId);
+    if (deuda == null) throw Exception('Deuda no encontrada');
+    if (weeks <= 0) throw Exception('Número de semanas inválido');
 
-    final weeklyAmount = debt.remainingAmount / weeks;
-
-    await _settings.put(_weeklyPlanKey(debtId), {
+    final montoPorSemana = deuda.remainingAmount / weeks;
+    await _config.put(_clavePlanSemanal(debtId), {
       'debtId': debtId,
       'weeks': weeks,
-      'weeklyAmount': weeklyAmount,
+      'weeklyAmount': montoPorSemana,
       'dueWeekday': dueWeekday,
       'createdAt': DateTime.now().toIso8601String(),
       'active': true,
@@ -213,41 +291,31 @@ class DatabaseService {
   }
 
   static Map<String, dynamic>? getDebtWeeklyPlan(String debtId) {
-    final raw = _settings.get(_weeklyPlanKey(debtId));
-    if (raw is Map) {
-      return Map<String, dynamic>.from(raw);
-    }
-    return null;
+    final raw = _config.get(_clavePlanSemanal(debtId));
+    return raw is Map ? Map<String, dynamic>.from(raw) : null;
   }
 
-  static Future<void> removeDebtWeeklyPlan(String debtId) async {
-    await _settings.delete(_weeklyPlanKey(debtId));
-  }
+  static Future<void> removeDebtWeeklyPlan(String debtId) async =>
+      await _config.delete(_clavePlanSemanal(debtId));
 
   static double getDebtPaidThisWeek(String debtId) {
-    final weekStart = _currentWeekStart();
-    double paid = 0;
-    for (final payment in _payments.values) {
-      if (payment.debtId == debtId && payment.date.isAfter(weekStart)) {
-        paid += payment.amount;
-      }
-    }
-    return paid;
+    final semanaInicio = _inicioSemannaActual();
+    return _pagos.values
+        .where((p) => p.debtId == debtId && p.date.isAfter(semanaInicio))
+        .fold(0.0, (sum, p) => sum + p.amount);
   }
 
   static bool isDebtWeeklyPaymentPending(Debt debt) {
     final plan = getDebtWeeklyPlan(debt.id);
     if (plan == null || plan['active'] != true) return false;
-
-    final dueWeekday = (plan['dueWeekday'] as int?) ?? DateTime.friday;
-    if (DateTime.now().weekday < dueWeekday) return false;
-
-    final weeklyAmount = (plan['weeklyAmount'] as num?)?.toDouble() ?? 0;
-    return getDebtPaidThisWeek(debt.id) + 0.01 < weeklyAmount;
+    final diaVencimiento = (plan['dueWeekday'] as int?) ?? DateTime.friday;
+    if (DateTime.now().weekday < diaVencimiento) return false;
+    final montoPorSemana = (plan['weeklyAmount'] as num?)?.toDouble() ?? 0;
+    return getDebtPaidThisWeek(debt.id) + 0.01 < montoPorSemana;
   }
 
   // ══════════════════════════════════════════════════════
-  // FIXED EXPENSES
+  // GASTOS FIJOS
   // ══════════════════════════════════════════════════════
 
   static Future<FixedExpense> addFixedExpense({
@@ -255,126 +323,170 @@ class DatabaseService {
     required double amount,
     required int dueDay,
   }) async {
-    final expense = FixedExpense(
+    final gasto = FixedExpense(
       id: generateId(),
       name: name,
       amount: amount,
       dueDay: dueDay.clamp(1, 28),
     );
-    await _fixedExpenses.put(expense.id, expense);
-    return expense;
+    await _gastosFijos.put(gasto.id, gasto);
+    return gasto;
   }
 
-  static List<FixedExpense> getAllFixedExpenses() {
-    return _fixedExpenses.values.where((e) => e.isActive).toList()
-      ..sort((a, b) => a.dueDay.compareTo(b.dueDay));
-  }
+  static List<FixedExpense> getAllFixedExpenses() =>
+      _gastosFijos.values.where((e) => e.isActive).toList()
+        ..sort((a, b) => a.dueDay.compareTo(b.dueDay));
 
-  static List<FixedExpensePayment> getAllFixedExpensePayments(String expenseId) {
-    return _fixedExpensePayments.values
-        .where((p) => p.expenseId == expenseId)
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
-  }
+  static List<FixedExpensePayment> getAllFixedExpensePayments(String expenseId) =>
+      _pagosFijos.values
+          .where((p) => p.expenseId == expenseId)
+          .toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
 
   static Future<void> deleteFixedExpense(String id) async {
-    final expense = _fixedExpenses.get(id);
-    if (expense != null) {
-      expense.isActive = false;
-      await expense.save();
+    final gasto = _gastosFijos.get(id);
+    if (gasto != null) {
+      gasto.isActive = false;
+      await gasto.save();
     }
   }
 
   static bool isFixedExpensePaidThisMonth(String expenseId) {
-    final key = _monthKey(DateTime.now());
-    return _fixedExpensePayments.values.any((p) =>
-        p.expenseId == expenseId && _monthKey(p.date) == key);
+    final mesActual = _clavesMes(DateTime.now());
+    return _pagosFijos.values.any(
+        (p) => p.expenseId == expenseId && _clavesMes(p.date) == mesActual);
   }
 
   static Future<void> registerFixedExpensePayment({
     required String expenseId,
     String? note,
   }) async {
-    final expense = _fixedExpenses.get(expenseId);
-    if (expense == null) throw Exception('Gasto fijo no encontrado');
+    final gasto = _gastosFijos.get(expenseId);
+    if (gasto == null) throw Exception('Gasto fijo no encontrado');
     if (isFixedExpensePaidThisMonth(expenseId)) return;
 
-    final payment = FixedExpensePayment(
+    final pago = FixedExpensePayment(
       id: generateId(),
       expenseId: expenseId,
-      amount: expense.amount,
+      amount: gasto.amount,
       date: DateTime.now(),
       note: note,
     );
-    await _fixedExpensePayments.put(payment.id, payment);
+    await _pagosFijos.put(pago.id, pago);
   }
 
   static List<FixedExpense> getPendingFixedExpensesThisMonth() {
-    final now = DateTime.now();
+    final hoy = DateTime.now();
     return getAllFixedExpenses().where((e) {
-      if (e.dueDay > now.day) return false;
+      if (e.dueDay > hoy.day) return false;
       return !isFixedExpensePaidThisMonth(e.id);
     }).toList();
   }
 
-  // ── Financial Calculations ──
-
   // ══════════════════════════════════════════════════════
-  // FONDO INTOCABLE — CHECKLIST ITEMS
+  // PARTIDAS DE NECESIDADES (checklist semanal)
   // ══════════════════════════════════════════════════════
 
-  /// Returns the current week's FondoItems, creating them if they don't exist yet.
-  static Future<List<FondoItem>> getOrCreateWeeklyFondoItems() async {
-    final weekStart = _currentWeekStart();
-    final weekKey = '${weekStart.year}-${weekStart.month}-${weekStart.day}';
+  /// Plantillas de partidas configuradas por el usuario.
+  /// Si no hay ninguna configurada, usa los valores por defecto.
+  static Map<String, double> getPlantillasPartidas() {
+    final raw = _config.get(_plantillasKey);
+    if (raw is Map && raw.isNotEmpty) {
+      return Map.fromEntries(
+        raw.entries.map(
+          (e) => MapEntry(e.key as String, ((e.value as num?)?.toDouble()) ?? 0.0),
+        ),
+      );
+    }
+    return Map.from(FinancialConstants.fondoItemDefaults);
+  }
 
-    final existing = _fondoItems.values.where((item) {
-      final k = '${item.weekStart.year}-${item.weekStart.month}-${item.weekStart.day}';
-      return k == weekKey;
+  /// Guarda las plantillas de partidas para nuevas semanas.
+  static Future<void> setPlantillasPartidas(Map<String, double> plantillas) async {
+    await setSetting(
+      _plantillasKey,
+      Map<String, dynamic>.fromEntries(
+        plantillas.entries.map((e) => MapEntry(e.key, e.value)),
+      ),
+    );
+  }
+
+  /// Devuelve las partidas de la semana actual, creándolas si no existen.
+  static Future<List<FondoItem>> getOrCreatePartidas() async {
+    final semanaInicio = _inicioSemannaActual();
+    final clavesSemana =
+        '${semanaInicio.year}-${semanaInicio.month}-${semanaInicio.day}';
+
+    final existentes = _partidas.values.where((item) {
+      final k =
+          '${item.weekStart.year}-${item.weekStart.month}-${item.weekStart.day}';
+      return k == clavesSemana;
     }).toList();
 
-    if (existing.isNotEmpty) return existing;
+    if (existentes.isNotEmpty) return existentes;
 
-    // Create new items for this week from defaults
-    final items = <FondoItem>[];
-    for (final entry in FinancialConstants.fondoItemDefaults.entries) {
+    // Crear desde plantillas
+    final plantillas = getPlantillasPartidas();
+    final nuevas = <FondoItem>[];
+    for (final entry in plantillas.entries) {
       final item = FondoItem(
         id: generateId(),
         name: entry.key,
         targetAmount: entry.value,
-        weekStart: weekStart,
+        weekStart: semanaInicio,
       );
-      await _fondoItems.put(item.id, item);
-      items.add(item);
+      await _partidas.put(item.id, item);
+      nuevas.add(item);
     }
-    return items;
+    return nuevas;
   }
 
-  /// Toggle the paid status of a FondoItem.
-  static Future<void> toggleFondoItem(String id) async {
-    final item = _fondoItems.get(id);
+  /// Alterna el estado pagado/pendiente de una partida.
+  static Future<void> togglePartida(String id) async {
+    final item = _partidas.get(id);
     if (item == null) return;
     item.isPaid = !item.isPaid;
     item.paidAt = item.isPaid ? DateTime.now() : null;
     await item.save();
   }
 
-  /// Update the target amount of a FondoItem.
-  static Future<void> updateFondoItemAmount(String id, double amount) async {
-    final item = _fondoItems.get(id);
+  /// Actualiza nombre y/o monto de una partida.
+  static Future<void> updatePartida(String id,
+      {String? name, double? amount}) async {
+    final item = _partidas.get(id);
     if (item == null) return;
-    item.targetAmount = amount;
+    if (name != null && name.isNotEmpty) item.name = name;
+    if (amount != null && amount > 0) item.targetAmount = amount;
     await item.save();
   }
 
+  /// Agrega una partida nueva a la semana actual.
+  static Future<FondoItem> addPartida({
+    required String name,
+    required double amount,
+  }) async {
+    final semanaInicio = _inicioSemannaActual();
+    final item = FondoItem(
+      id: generateId(),
+      name: name,
+      targetAmount: amount,
+      weekStart: semanaInicio,
+    );
+    await _partidas.put(item.id, item);
+    return item;
+  }
+
+  /// Elimina una partida de la semana actual.
+  static Future<void> deletePartida(String id) async =>
+      await _partidas.delete(id);
+
   // ══════════════════════════════════════════════════════
-  // SAVINGS FUNDS & MOVEMENTS
+  // FONDOS DE AHORRO
   // ══════════════════════════════════════════════════════
 
-  static List<SavingsFund> getAllSavingsFunds() {
-    return _savingsFunds.values.where((f) => f.isActive).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  }
+  static List<SavingsFund> getAllSavingsFunds() =>
+      _fondosAhorro.values.where((f) => f.isActive).toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
   static Future<SavingsFund> createSavingsFund({
     required String name,
@@ -382,7 +494,7 @@ class DatabaseService {
     double targetAmount = 0,
     String? description,
   }) async {
-    final fund = SavingsFund(
+    final fondo = SavingsFund(
       id: generateId(),
       name: name,
       type: type,
@@ -390,23 +502,23 @@ class DatabaseService {
       description: description,
       createdAt: DateTime.now(),
     );
-    await _savingsFunds.put(fund.id, fund);
-    return fund;
+    await _fondosAhorro.put(fondo.id, fondo);
+    return fondo;
   }
 
-  /// Deposit [amount] from Capital Libre into a savings fund.
+  /// Deposita [amount] al fondo desde el presupuesto de ahorro (20%).
   static Future<void> depositToFund({
     required String fundId,
     required double amount,
     String? note,
   }) async {
-    final fund = _savingsFunds.get(fundId);
-    if (fund == null) throw Exception('Fondo no encontrado');
+    final fondo = _fondosAhorro.get(fundId);
+    if (fondo == null) throw Exception('Fondo no encontrado');
 
-    fund.balance += amount;
-    await fund.save();
+    fondo.balance += amount;
+    await fondo.save();
 
-    final movement = SavingsMovement(
+    final movimiento = SavingsMovement(
       id: generateId(),
       fundId: fundId,
       amount: amount,
@@ -414,23 +526,23 @@ class DatabaseService {
       note: note,
       date: DateTime.now(),
     );
-    await _savingsMovements.put(movement.id, movement);
+    await _movimientosAhorro.put(movimiento.id, movimiento);
   }
 
-  /// Withdraw [amount] from a savings fund back to Capital Libre.
+  /// Retira [amount] del fondo, devolviendo el saldo al presupuesto de ahorro.
   static Future<void> withdrawFromFund({
     required String fundId,
     required double amount,
     String? note,
   }) async {
-    final fund = _savingsFunds.get(fundId);
-    if (fund == null) throw Exception('Fondo no encontrado');
-    if (fund.balance < amount) throw Exception('Saldo insuficiente en el fondo');
+    final fondo = _fondosAhorro.get(fundId);
+    if (fondo == null) throw Exception('Fondo no encontrado');
+    if (fondo.balance < amount) throw Exception('Saldo insuficiente en el fondo');
 
-    fund.balance -= amount;
-    await fund.save();
+    fondo.balance -= amount;
+    await fondo.save();
 
-    final movement = SavingsMovement(
+    final movimiento = SavingsMovement(
       id: generateId(),
       fundId: fundId,
       amount: amount,
@@ -438,220 +550,274 @@ class DatabaseService {
       note: note,
       date: DateTime.now(),
     );
-    await _savingsMovements.put(movement.id, movement);
+    await _movimientosAhorro.put(movimiento.id, movimiento);
   }
 
-  static List<SavingsMovement> getMovementsForFund(String fundId) {
-    return _savingsMovements.values
-        .where((m) => m.fundId == fundId)
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
-  }
+  static List<SavingsMovement> getMovementsForFund(String fundId) =>
+      _movimientosAhorro.values
+          .where((m) => m.fundId == fundId)
+          .toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
 
+  /// Elimina (soft-delete) un fondo. Si tiene saldo, crea un retiro
+  /// para que el presupuesto de ahorro quede correctamente restaurado.
   static Future<void> deleteSavingsFund(String id) async {
-    final fund = _savingsFunds.get(id);
-    if (fund != null) {
-      fund.isActive = false;
-      await fund.save();
+    final fondo = _fondosAhorro.get(id);
+    if (fondo == null) return;
+
+    if (fondo.balance > 0) {
+      final movimiento = SavingsMovement(
+        id: generateId(),
+        fundId: id,
+        amount: fondo.balance,
+        isDeposit: false,
+        note: 'Fondo eliminado — saldo devuelto al presupuesto de ahorro',
+        date: DateTime.now(),
+      );
+      await _movimientosAhorro.put(movimiento.id, movimiento);
     }
+
+    fondo.isActive = false;
+    await fondo.save();
   }
 
-  /// Sum of all active savings fund balances.
-  static double getTotalSavingsBalance() {
-    return getAllSavingsFunds().fold(0.0, (sum, f) => sum + f.balance);
-  }
+  /// Suma total de saldos en todos los fondos activos.
+  static double getTotalSavingsBalance() =>
+      getAllSavingsFunds().fold(0.0, (sum, f) => sum + f.balance);
 
-  // ── Financial Calculations ──
+  // ══════════════════════════════════════════════════════
+  // CÁLCULOS FINANCIEROS
+  // ══════════════════════════════════════════════════════
 
-  /// Capital Libre disponible esta semana (munición libre menos pagos y depósitos a fondos).
-  static double getMunicionLibreTotal() {
-    final currentWeekStart = _currentWeekStart();
-
-    double totalMunicion = 0;
-    for (final income in _incomes.values) {
-      if (income.date.isAfter(currentWeekStart)) {
-        totalMunicion += income.municionLibre;
-      }
-    }
-
-    // Subtract debt payments made this week
-    for (final payment in _payments.values) {
-      if (payment.date.isAfter(currentWeekStart)) {
-        totalMunicion -= payment.amount;
-      }
-    }
-
-    // Adjust for savings fund movements this week
-    for (final movement in _savingsMovements.values) {
-      if (movement.date.isAfter(currentWeekStart)) {
-        if (movement.isDeposit) {
-          totalMunicion -= movement.amount;
-        } else {
-          totalMunicion += movement.amount;
-        }
-      }
-    }
-
-    // Subtract fixed expense payments this week
-    for (final fixed in _fixedExpensePayments.values) {
-      if (fixed.date.isAfter(currentWeekStart)) {
-        totalMunicion -= fixed.amount;
-      }
-    }
-
-    return totalMunicion.clamp(0.0, double.infinity);
-  }
-
-  /// Total Bloque de Titanio secured this week.
-  static double getBloqueDeTitanioThisWeek() {
-    final currentWeekStart = _currentWeekStart();
-
-    double total = 0;
-    for (final income in _incomes.values) {
-      if (income.date.isAfter(currentWeekStart)) {
-        total += income.bloqueDeTitanio;
-      }
-    }
-    return total;
-  }
-
-  /// BBVA total balance (all incomes - all payments)
+  /// Saldo total en cuenta (ingresos − pagos de deudas − gastos fijos pagados).
+  /// Los fondos de ahorro NO se restan porque siguen siendo dinero en tu cuenta.
   static double getSaldoTotal() {
-    double totalIncome = 0;
-    for (final income in _incomes.values) {
-      totalIncome += income.amount;
-    }
-
-    double totalPayments = 0;
-    for (final payment in _payments.values) {
-      totalPayments += payment.amount;
-    }
-
-    for (final fixed in _fixedExpensePayments.values) {
-      totalPayments += fixed.amount;
-    }
-
-    return totalIncome - totalPayments;
+    final totalIngresos = _ingresos.values.fold(0.0, (s, i) => s + i.amount);
+    final totalPagos = _pagos.values.fold(0.0, (s, p) => s + p.amount)
+        + _pagosFijos.values.fold(0.0, (s, f) => s + f.amount);
+    return totalIngresos - totalPagos;
   }
+
+  /// Dinero disponible para gastos personales en el período actual.
+  /// Equivale al % de Gastos Personales del ingreso del período.
+  /// No disminuye por ahorros ni pagos de deudas — esos salen de [getAhorroDisponible].
+  static double getGastosDisponibles() {
+    final inicioP = getCurrentPeriodStart();
+    final pctGastos = getWantsPercent() / 100.0;
+
+    return _ingresos.values
+        .where((i) => i.date.isAfter(inicioP))
+        .fold(0.0, (s, i) => s + i.amount * pctGastos)
+        .clamp(0.0, double.infinity);
+  }
+
+  /// Dinero disponible para ahorro y pago de deudas en el período actual.
+  /// Equivale al % de Ahorro y Deudas del ingreso, menos lo ya comprometido.
+  static double getAhorroDisponible() {
+    final inicioP = getCurrentPeriodStart();
+    final pctAhorro = getSavingsPercent() / 100.0;
+
+    double total = _ingresos.values
+        .where((i) => i.date.isAfter(inicioP))
+        .fold(0.0, (s, i) => s + i.amount * pctAhorro);
+
+    for (final m in _movimientosAhorro.values) {
+      if (m.date.isAfter(inicioP)) {
+        total += m.isDeposit ? -m.amount : m.amount;
+      }
+    }
+    for (final p in _pagos.values) {
+      if (p.date.isAfter(inicioP)) total -= p.amount;
+    }
+
+    return total.clamp(0.0, double.infinity);
+  }
+
+  /// Total de ingresos asignados a Necesidades del Hogar en el período actual.
+  /// Es el % de Necesidades multiplicado por cada ingreso registrado en el período.
+  static double getNecesidadesAsignadas() {
+    final inicioP = getCurrentPeriodStart();
+    return _ingresos.values
+        .where((i) => i.date.isAfter(inicioP))
+        .fold(0.0, (s, i) => s + i.necesidades);
+  }
+
+  /// Devuelve true si el ingreso asignado a Necesidades cubre el total
+  /// de las partidas planificadas para esta semana.
+  static bool isNecesidadesCubiertas() {
+    final asignado = getNecesidadesAsignadas();
+    if (asignado <= 0) return false;
+
+    final semanaInicio = _inicioSemannaActual();
+    final clavesSemana =
+        '${semanaInicio.year}-${semanaInicio.month}-${semanaInicio.day}';
+    final partidasSemana = _partidas.values.where((item) {
+      final k =
+          '${item.weekStart.year}-${item.weekStart.month}-${item.weekStart.day}';
+      return k == clavesSemana;
+    }).toList();
+
+    if (partidasSemana.isEmpty) return true;
+    final totalNecesario =
+        partidasSemana.fold(0.0, (s, i) => s + i.targetAmount);
+    return asignado >= totalNecesario;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // RESÚMENES FINANCIEROS
+  // ══════════════════════════════════════════════════════
 
   static MonthlyBalanceSummary getCurrentMonthSummary() {
-    final monthStart = _currentMonthStart();
+    final inicioMes = _inicioMesActual();
 
-    double income = 0;
-    for (final item in _incomes.values) {
-      if (item.date.isAfter(monthStart)) income += item.amount;
-    }
+    final ingresos = _ingresos.values
+        .where((i) => i.date.isAfter(inicioMes))
+        .fold(0.0, (s, i) => s + i.amount);
 
-    double debtPayments = 0;
-    for (final item in _payments.values) {
-      if (item.date.isAfter(monthStart)) debtPayments += item.amount;
-    }
+    final pagosDeuda = _pagos.values
+        .where((p) => p.date.isAfter(inicioMes))
+        .fold(0.0, (s, p) => s + p.amount);
 
-    double fixedPayments = 0;
-    for (final item in _fixedExpensePayments.values) {
-      if (item.date.isAfter(monthStart)) fixedPayments += item.amount;
-    }
+    final pagosFijosMes = _pagosFijos.values
+        .where((f) => f.date.isAfter(inicioMes))
+        .fold(0.0, (s, f) => s + f.amount);
 
-    double savingsNet = 0;
-    for (final item in _savingsMovements.values) {
-      if (item.date.isAfter(monthStart)) {
-        savingsNet += item.isDeposit ? item.amount : -item.amount;
+    double ahorroNeto = 0;
+    for (final m in _movimientosAhorro.values) {
+      if (m.date.isAfter(inicioMes)) {
+        ahorroNeto += m.isDeposit ? m.amount : -m.amount;
       }
     }
 
-    final cashResult = income - debtPayments - fixedPayments - savingsNet;
     return MonthlyBalanceSummary(
-      incomes: income,
-      debtPayments: debtPayments,
-      fixedExpenses: fixedPayments,
-      savingsNet: savingsNet,
-      cashResult: cashResult,
+      incomes: ingresos,
+      debtPayments: pagosDeuda,
+      fixedExpenses: pagosFijosMes,
+      savingsNet: ahorroNeto,
+      cashResult: ingresos - pagosDeuda - pagosFijosMes - ahorroNeto,
     );
   }
 
-  static List<PendingInfoItem> getPendingInfoItems() {
-    final result = <PendingInfoItem>[];
+  /// Resumen financiero de un mes específico.
+  static MonthlyBalanceSummary getMonthSummaryByDate(int year, int month) {
+    final inicio = DateTime(year, month, 1);
+    final fin = month < 12
+        ? DateTime(year, month + 1, 1)
+        : DateTime(year + 1, 1, 1);
 
-    for (final debt in getAllDebts()) {
-      final plan = getDebtWeeklyPlan(debt.id);
+    bool enRango(DateTime d) => !d.isBefore(inicio) && d.isBefore(fin);
+
+    final ingresos = _ingresos.values
+        .where((i) => enRango(i.date))
+        .fold(0.0, (s, i) => s + i.amount);
+
+    final pagosDeuda = _pagos.values
+        .where((p) => enRango(p.date))
+        .fold(0.0, (s, p) => s + p.amount);
+
+    final pagosFijosMes = _pagosFijos.values
+        .where((f) => enRango(f.date))
+        .fold(0.0, (s, f) => s + f.amount);
+
+    double ahorroNeto = 0;
+    for (final m in _movimientosAhorro.values) {
+      if (enRango(m.date)) ahorroNeto += m.isDeposit ? m.amount : -m.amount;
+    }
+
+    return MonthlyBalanceSummary(
+      incomes: ingresos,
+      debtPayments: pagosDeuda,
+      fixedExpenses: pagosFijosMes,
+      savingsNet: ahorroNeto,
+      cashResult: ingresos - pagosDeuda - pagosFijosMes - ahorroNeto,
+    );
+  }
+
+  /// Lista de meses (descendente) que tienen al menos un movimiento registrado.
+  static List<DateTime> getMonthsWithData() {
+    final vistos = <String, DateTime>{};
+    void registrar(DateTime d) =>
+        vistos['${d.year}-${d.month}'] ??= DateTime(d.year, d.month, 1);
+
+    for (final i in _ingresos.values)    { registrar(i.date); }
+    for (final p in _pagos.values)       { registrar(p.date); }
+    for (final f in _pagosFijos.values)  { registrar(f.date); }
+    return vistos.values.toList()..sort((a, b) => b.compareTo(a));
+  }
+
+  // ══════════════════════════════════════════════════════
+  // PENDIENTES
+  // ══════════════════════════════════════════════════════
+
+  static List<PendingInfoItem> getPendingInfoItems() {
+    final resultado = <PendingInfoItem>[];
+
+    for (final deuda in getAllDebts()) {
+      final plan = getDebtWeeklyPlan(deuda.id);
       if (plan == null || plan['active'] != true) continue;
 
-      final dueDay = (plan['dueWeekday'] as int?) ?? DateTime.friday;
-      final weeklyAmount = (plan['weeklyAmount'] as num?)?.toDouble() ?? 0;
-      final paid = getDebtPaidThisWeek(debt.id);
-      final pending = (weeklyAmount - paid).clamp(0.0, double.infinity);
+      final diaVencimiento = (plan['dueWeekday'] as int?) ?? DateTime.friday;
+      final montoPorSemana = (plan['weeklyAmount'] as num?)?.toDouble() ?? 0;
+      final pagado = getDebtPaidThisWeek(deuda.id);
+      final pendiente =
+          (montoPorSemana - pagado).clamp(0.0, double.infinity);
 
-      if (DateTime.now().weekday >= dueDay && pending > 0) {
-        result.add(PendingInfoItem(
-          title: debt.name,
+      if (DateTime.now().weekday >= diaVencimiento && pendiente > 0) {
+        resultado.add(PendingInfoItem(
+          title: deuda.name,
           subtitle: 'Pago semanal pendiente',
-          amount: pending,
+          amount: pendiente,
           kind: PendingKind.weeklyDebt,
         ));
       }
     }
 
-    for (final item in getPendingFixedExpensesThisMonth()) {
-      result.add(PendingInfoItem(
-        title: item.name,
-        subtitle: 'Gasto fijo pendiente (día ${item.dueDay})',
-        amount: item.amount,
+    for (final gasto in getPendingFixedExpensesThisMonth()) {
+      resultado.add(PendingInfoItem(
+        title: gasto.name,
+        subtitle: 'Gasto fijo pendiente (día ${gasto.dueDay})',
+        amount: gasto.amount,
         kind: PendingKind.fixedExpense,
-        refId: item.id,
+        refId: gasto.id,
       ));
     }
 
-    result.sort((a, b) => b.amount.compareTo(a.amount));
-    return result;
+    resultado.sort((a, b) => b.amount.compareTo(a.amount));
+    return resultado;
   }
 
-  /// Total debt across all categories
-  static double getTotalDebtRemaining() {
-    double total = 0;
-    for (final debt in getAllDebts()) {
-      total += debt.remainingAmount;
-    }
-    return total;
-  }
+  // ══════════════════════════════════════════════════════
+  // TOTALES DE DEUDA
+  // ══════════════════════════════════════════════════════
 
-  /// Total debt remaining for a specific category
-  static double getTotalDebtByCategory(DebtCategory category) {
-    double total = 0;
-    for (final debt in getDebtsByCategory(category)) {
-      total += debt.remainingAmount;
-    }
-    return total;
-  }
+  static double getTotalDebtRemaining() =>
+      getAllDebts().fold(0.0, (s, d) => s + d.remainingAmount);
 
-  /// Boolean: is titanium block secured?
-  static bool isTitaniumSecured() {
-    return getBloqueDeTitanioThisWeek() >= FinancialConstants.bloqueDeTitanio;
-  }
+  static double getTotalDebtByCategory(DebtCategory category) =>
+      getDebtsByCategory(category).fold(0.0, (s, d) => s + d.remainingAmount);
 
-  // ── Settings ──
+  // ══════════════════════════════════════════════════════
+  // CONFIGURACIÓN GENÉRICA
+  // ══════════════════════════════════════════════════════
 
-  static Future<void> setSetting(String key, dynamic value) async {
-    await _settings.put(key, value);
-  }
+  static Future<void> setSetting(String key, dynamic value) async =>
+      await _config.put(key, value);
 
-  static dynamic getSetting(String key, {dynamic defaultValue}) {
-    return _settings.get(key, defaultValue: defaultValue);
-  }
+  static dynamic getSetting(String key, {dynamic defaultValue}) =>
+      _config.get(key, defaultValue: defaultValue);
 
-  /// Get Gemini API key from local settings
-  static String? getGeminiApiKey() {
-    return _settings.get('gemini_api_key') as String?;
-  }
+  static String? getGeminiApiKey() =>
+      _config.get('gemini_api_key') as String?;
 
-  static Future<void> setGeminiApiKey(String key) async {
-    await _settings.put('gemini_api_key', key);
-  }
+  static Future<void> setGeminiApiKey(String key) async =>
+      await _config.put('gemini_api_key', key);
 }
 
-enum PendingKind {
-  weeklyDebt,
-  fixedExpense,
-}
+// ══════════════════════════════════════════════════════
+// VALUE OBJECTS
+// ══════════════════════════════════════════════════════
+
+enum PendingKind { weeklyDebt, fixedExpense }
 
 class PendingInfoItem {
   final String title;

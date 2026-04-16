@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../theme/refugio_theme.dart';
 import '../widgets/tactical_widgets.dart';
 import '../services/database_service.dart';
-import '../models/constants.dart';
 import '../models/debt.dart';
 import '../models/fondo_item.dart';
 
@@ -22,32 +22,36 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
     decimalDigits: 2,
   );
 
-  List<FondoItem> _fondoItems = [];
+  List<FondoItem> _partidas = [];
 
   @override
   void initState() {
     super.initState();
-    _loadFondoItems();
+    _cargarPartidas();
   }
 
-  Future<void> _loadFondoItems() async {
-    final items = await DatabaseService.getOrCreateWeeklyFondoItems();
-    if (mounted) setState(() => _fondoItems = items);
+  Future<void> _cargarPartidas() async {
+    final items = await DatabaseService.getOrCreatePartidas();
+    if (mounted) setState(() => _partidas = items);
   }
 
   @override
   Widget build(BuildContext context) {
-    final saldoTotal = DatabaseService.getSaldoTotal();
-    final titaniumSecured = DatabaseService.isTitaniumSecured();
-    final titaniumAmount = DatabaseService.getBloqueDeTitanioThisWeek();
-    final capitalLibre = DatabaseService.getMunicionLibreTotal();
-    final totalDebt = DatabaseService.getTotalDebtRemaining();
+    final saldoTotal            = DatabaseService.getSaldoTotal();
+    final necesidadesCubiertas  = DatabaseService.isNecesidadesCubiertas();
+    final necesidadesAsignadas  = DatabaseService.getNecesidadesAsignadas();
+    final gastosDisponibles     = DatabaseService.getGastosDisponibles();
+    final totalDeuda            = DatabaseService.getTotalDebtRemaining();
+    final totalPartidas         = _partidas.fold(0.0, (s, i) => s + i.targetAmount);
+    final needsPct        = DatabaseService.getNeedsPercent();
+    final wantsPct        = DatabaseService.getWantsPercent();
+    final savingsPct      = DatabaseService.getSavingsPercent();
 
     return RefreshIndicator(
       color: RefugioTheme.primary,
       backgroundColor: RefugioTheme.surface,
       onRefresh: () async {
-        await _loadFondoItems();
+        await _cargarPartidas();
         setState(() {});
       },
       child: ListView(
@@ -56,10 +60,10 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
           _buildHeader(),
           const SizedBox(height: 20),
 
-          // ── Saldo Total BBVA ──
+          // ── Saldo Total ──
           RefugioCard(
             borderColor: RefugioTheme.primary,
-            headerLabel: 'Saldo Total BBVA',
+            headerLabel: 'Saldo Total ${DatabaseService.getBankName()}',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -77,18 +81,18 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
           ),
           const SizedBox(height: 16),
 
-          // ── Fondo Intocable ──
+          // ── Necesidades del Hogar ──
           RefugioCard(
-            borderColor: titaniumSecured ? RefugioTheme.primary : RefugioTheme.salmon,
-            headerLabel: 'Fondo Intocable',
+            borderColor: necesidadesCubiertas ? RefugioTheme.primary : RefugioTheme.salmon,
+            headerLabel: 'Necesidades del Hogar',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Icon(
-                      titaniumSecured ? Icons.verified_rounded : Icons.info_outline_rounded,
-                      color: titaniumSecured ? RefugioTheme.primary : RefugioTheme.salmon,
+                      necesidadesCubiertas ? Icons.verified_rounded : Icons.info_outline_rounded,
+                      color: necesidadesCubiertas ? RefugioTheme.primary : RefugioTheme.salmon,
                       size: 28,
                     ),
                     const SizedBox(width: 12),
@@ -97,13 +101,13 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            titaniumSecured ? 'Asegurado' : 'Incompleto',
-                            style: titaniumSecured
+                            necesidadesCubiertas ? 'Cubiertas' : 'Pendiente',
+                            style: necesidadesCubiertas
                                 ? RefugioTextStyles.heading.copyWith(fontSize: 16, color: RefugioTheme.primary)
                                 : RefugioTextStyles.alertSalmon.copyWith(fontSize: 16),
                           ),
                           Text(
-                            '${_currencyFormat.format(titaniumAmount)} / ${_currencyFormat.format(FinancialConstants.bloqueDeTitanio)}',
+                            '${_currencyFormat.format(necesidadesAsignadas)} / ${_currencyFormat.format(totalPartidas)}',
                             style: RefugioTextStyles.subtitle,
                           ),
                         ],
@@ -113,8 +117,10 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
                 ),
                 const SizedBox(height: 16),
                 RefugioProgressBar(
-                  progress: titaniumAmount / FinancialConstants.bloqueDeTitanio,
-                  color: titaniumSecured ? RefugioTheme.primary : RefugioTheme.salmon,
+                  progress: totalPartidas > 0
+                      ? (necesidadesAsignadas / totalPartidas).clamp(0.0, 1.0)
+                      : (necesidadesAsignadas > 0 ? 1.0 : 0.0),
+                  color: necesidadesCubiertas ? RefugioTheme.primary : RefugioTheme.salmon,
                   label: 'Cobertura',
                   height: 10,
                 ),
@@ -125,10 +131,10 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
           ),
           const SizedBox(height: 16),
 
-          // ── Capital Libre ──
+          // ── Disponible ──
           RefugioCard(
             borderColor: capitalLibre > 0 ? RefugioTheme.primary : RefugioTheme.amber,
-            headerLabel: 'Capital Libre',
+            headerLabel: 'Disponible',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -141,12 +147,16 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Disponible para uso libre',
+                  'Puedes usar este dinero libremente',
                   style: RefugioTextStyles.label,
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 16),
+
+          // ── Distribución del ingreso (50/30/20) ──
+          _buildBudgetBreakdown(needsPct, wantsPct, savingsPct),
           const SizedBox(height: 16),
 
           // ── Gastos Fijos Mensuales ──
@@ -157,31 +167,31 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
           _buildSavingsSummary(),
           const SizedBox(height: 16),
 
-          // ── Resumen de Pasivos ──
+          // ── Resumen de Deudas ──
           RefugioCard(
-            headerLabel: 'Resumen de Pasivos',
+            headerLabel: 'Resumen de Deudas',
             child: Column(
               children: [
                 _buildDebtSummaryRow(
-                  'Compromisos Personales',
+                  'Familia y Amigos',
                   DatabaseService.getTotalDebtByCategory(DebtCategory.deudaDeHonor),
                   RefugioTheme.debtHonor,
                 ),
                 const SizedBox(height: 8),
                 _buildDebtSummaryRow(
-                  'Líneas Estratégicas',
+                  'Tarjetas y Créditos',
                   DatabaseService.getTotalDebtByCategory(DebtCategory.lineaEstrategica),
                   RefugioTheme.debtLinea,
                 ),
                 const SizedBox(height: 8),
                 _buildDebtSummaryRow(
-                  'Pasivos Prioritarios',
+                  'Deudas Urgentes',
                   DatabaseService.getTotalDebtByCategory(DebtCategory.basuraFinanciera),
                   RefugioTheme.debtBasura,
                 ),
                 const SizedBox(height: 8),
                 _buildDebtSummaryRow(
-                  'En Pausa Estratégica',
+                  'En Pausa',
                   DatabaseService.getTotalDebtByCategory(DebtCategory.laCongeladora),
                   RefugioTheme.debtCongeladora,
                 ),
@@ -189,7 +199,7 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Total de pasivos', style: RefugioTextStyles.label.copyWith(color: RefugioTheme.textPrimary)),
+                    Text('Total de deudas', style: RefugioTextStyles.label.copyWith(color: RefugioTheme.textPrimary)),
                     Text(
                       _currencyFormat.format(totalDebt),
                       style: RefugioTextStyles.body.copyWith(
@@ -215,7 +225,7 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Panel de Control',
+          'Inicio',
           style: RefugioTextStyles.heading.copyWith(fontSize: 24),
         ),
         const SizedBox(height: 4),
@@ -223,7 +233,7 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
           children: [
             StatusIndicator(
               active: true,
-              label: 'Conectado',
+              label: 'Activo',
               activeColor: RefugioTheme.primary,
             ),
             const SizedBox(width: 16),
@@ -238,26 +248,32 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
   }
 
   Widget _buildFundChecklist() {
-    if (_fondoItems.isEmpty) {
+    if (_partidas.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(top: 8),
-        child: Row(
+        child: Column(
           children: [
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 1.5),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                ),
+                const SizedBox(width: 10),
+                Text('Cargando partidas…', style: RefugioTextStyles.label),
+              ],
             ),
-            const SizedBox(width: 10),
-            Text('Cargando partidas…', style: RefugioTextStyles.label),
+            const SizedBox(height: 10),
+            _buildAddItemButton(),
           ],
         ),
       );
     }
 
-    final paidCount = _fondoItems.where((i) => i.isPaid).length;
-    final total = _fondoItems.fold(0.0, (s, i) => s + i.targetAmount);
-    final covered = _fondoItems.where((i) => i.isPaid).fold(0.0, (s, i) => s + i.targetAmount);
+    final paidCount = _partidas.where((i) => i.isPaid).length;
+    final total = _partidas.fold(0.0, (s, i) => s + i.targetAmount);
+    final covered = _partidas.where((i) => i.isPaid).fold(0.0, (s, i) => s + i.targetAmount);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,9 +282,9 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              '$paidCount/${_fondoItems.length} cubiertas',
+              '$paidCount/${_partidas.length} cubiertas',
               style: RefugioTextStyles.label.copyWith(
-                color: paidCount == _fondoItems.length
+                color: paidCount == _partidas.length
                     ? RefugioTheme.primary
                     : RefugioTheme.textMuted,
                 fontWeight: FontWeight.w600,
@@ -281,67 +297,38 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
           ],
         ),
         const SizedBox(height: 10),
-        ..._fondoItems.map((item) => _buildFondoItemTile(item)),
+        ..._partidas.map((item) => _buildFondoItemTile(item)),
+        const SizedBox(height: 6),
+        _buildAddItemButton(),
       ],
     );
   }
 
-  Widget _buildFondoItemTile(FondoItem item) {
+  Widget _buildAddItemButton() {
     return GestureDetector(
-      onTap: () async {
-        await DatabaseService.toggleFondoItem(item.id);
-        await _loadFondoItems();
-      },
-      onLongPress: () => _showEditAmountDialog(item),
+      onTap: _showAddItemDialog,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
-          color: item.isPaid
-              ? RefugioTheme.primary.withValues(alpha: 0.08)
-              : RefugioTheme.background.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: item.isPaid ? RefugioTheme.primary.withValues(alpha: 0.3) : RefugioTheme.cardBorder,
+            color: RefugioTheme.primary.withValues(alpha: 0.25),
             width: 1,
           ),
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                item.isPaid ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                key: ValueKey(item.isPaid),
-                size: 20,
-                color: item.isPaid ? RefugioTheme.primary : RefugioTheme.textMuted,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                item.name,
-                style: RefugioTextStyles.body.copyWith(
-                  fontSize: 13,
-                  color: item.isPaid ? RefugioTheme.textSecondary : RefugioTheme.textPrimary,
-                  decoration: item.isPaid ? TextDecoration.lineThrough : null,
-                  decorationColor: RefugioTheme.textMuted,
-                ),
-              ),
-            ),
+            Icon(Icons.add_rounded,
+                size: 15, color: RefugioTheme.primary.withValues(alpha: 0.7)),
+            const SizedBox(width: 6),
             Text(
-              _currencyFormat.format(item.targetAmount),
+              'Agregar partida',
               style: RefugioTextStyles.label.copyWith(
+                color: RefugioTheme.primary.withValues(alpha: 0.8),
                 fontSize: 12,
-                color: item.isPaid ? RefugioTheme.primary : RefugioTheme.textSecondary,
-                fontWeight: FontWeight.w600,
               ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.edit_outlined,
-              size: 12,
-              color: RefugioTheme.textMuted.withValues(alpha: 0.5),
             ),
           ],
         ),
@@ -349,44 +336,288 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
     );
   }
 
-  void _showEditAmountDialog(FondoItem item) {
-    final controller = TextEditingController(text: item.targetAmount.toStringAsFixed(2));
+  Widget _buildFondoItemTile(FondoItem item) {
+    return Dismissible(
+      key: Key('fondo_${item.id}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: RefugioTheme.salmon.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Icon(Icons.delete_outline_rounded,
+            color: RefugioTheme.salmon, size: 18),
+      ),
+      confirmDismiss: (_) async {
+        return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Eliminar partida'),
+            content: Text('¿Quitar "${item.name}" de la lista de necesidades esta semana?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar',
+                    style: TextStyle(color: RefugioTheme.textMuted)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: RefugioTheme.salmonDim),
+                child: const Text('Eliminar'),
+              ),
+            ],
+          ),
+        );
+      },
+      onDismissed: (_) async {
+        await DatabaseService.deletePartida(item.id);
+        await _cargarPartidas();
+      },
+      child: GestureDetector(
+        onTap: () async {
+          await DatabaseService.togglePartida(item.id);
+          await _cargarPartidas();
+        },
+        onLongPress: () => _showEditItemDialog(item),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: item.isPaid
+                ? RefugioTheme.primary.withValues(alpha: 0.08)
+                : RefugioTheme.background.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: item.isPaid
+                  ? RefugioTheme.primary.withValues(alpha: 0.3)
+                  : RefugioTheme.cardBorder,
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  item.isPaid
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  key: ValueKey(item.isPaid),
+                  size: 20,
+                  color: item.isPaid ? RefugioTheme.primary : RefugioTheme.textMuted,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  item.name,
+                  style: RefugioTextStyles.body.copyWith(
+                    fontSize: 13,
+                    color: item.isPaid
+                        ? RefugioTheme.textSecondary
+                        : RefugioTheme.textPrimary,
+                    decoration: item.isPaid ? TextDecoration.lineThrough : null,
+                    decorationColor: RefugioTheme.textMuted,
+                  ),
+                ),
+              ),
+              Text(
+                _currencyFormat.format(item.targetAmount),
+                style: RefugioTextStyles.label.copyWith(
+                  fontSize: 12,
+                  color: item.isPaid
+                      ? RefugioTheme.primary
+                      : RefugioTheme.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.more_vert_rounded,
+                size: 14,
+                color: RefugioTheme.textMuted.withValues(alpha: 0.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditItemDialog(FondoItem item) {
+    final nameCtrl = TextEditingController(text: item.name);
+    final amountCtrl =
+        TextEditingController(text: item.targetAmount.toStringAsFixed(2));
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Ajustar monto: ${item.name}'),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            labelText: 'Monto asignado',
-            prefixText: '\$ ',
-            suffixText: 'MXN',
+        title: const Text('Editar partida'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(labelText: 'Nombre'),
+              style: TextStyle(
+                fontFamily: RefugioTheme.fontFamily,
+                fontSize: 15,
+                color: RefugioTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: amountCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'Monto',
+                prefixText: '\$ ',
+                suffixText: 'MXN',
+              ),
+              style: TextStyle(
+                fontFamily: RefugioTheme.fontFamily,
+                fontSize: 18,
+                color: RefugioTheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          // Eliminar al lado izquierdo
+          TextButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (c) => AlertDialog(
+                  title: const Text('Eliminar partida'),
+                  content: Text('¿Eliminar "${item.name}"?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(c, false),
+                      child: const Text('Cancelar',
+                          style: TextStyle(color: RefugioTheme.textMuted)),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(c, true),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: RefugioTheme.salmonDim),
+                      child: const Text('Eliminar'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await DatabaseService.deletePartida(item.id);
+                await _cargarPartidas();
+              }
+            },
+            icon: const Icon(Icons.delete_outline_rounded,
+                size: 15, color: RefugioTheme.salmon),
+            label: const Text('Eliminar',
+                style: TextStyle(color: RefugioTheme.salmon, fontSize: 13)),
           ),
-          style: TextStyle(
-            fontFamily: RefugioTheme.fontFamily,
-            fontSize: 18,
-            color: RefugioTheme.primary,
-            fontWeight: FontWeight.w700,
+          const Spacer(),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar',
+                style: TextStyle(color: RefugioTheme.textMuted)),
           ),
-          autofocus: true,
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              final val = double.tryParse(amountCtrl.text.trim());
+              if (name.isEmpty || val == null || val <= 0) return;
+              await DatabaseService.updatePartida(item.id,
+                  name: name, amount: val);
+              if (!ctx.mounted) return;
+              Navigator.pop(ctx);
+              await _cargarPartidas();
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddItemDialog() {
+    final nameCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nueva partida'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Nombre',
+                hintText: 'Ej: Agua, Luz, Internet…',
+              ),
+              style: TextStyle(
+                fontFamily: RefugioTheme.fontFamily,
+                fontSize: 15,
+                color: RefugioTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: amountCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'Monto',
+                prefixText: '\$ ',
+                suffixText: 'MXN',
+              ),
+              style: TextStyle(
+                fontFamily: RefugioTheme.fontFamily,
+                fontSize: 18,
+                color: RefugioTheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar', style: TextStyle(color: RefugioTheme.textMuted)),
+            child: const Text('Cancelar',
+                style: TextStyle(color: RefugioTheme.textMuted)),
           ),
           ElevatedButton(
             onPressed: () async {
-              final val = double.tryParse(controller.text.trim());
-              if (val != null && val > 0) {
-                await DatabaseService.updateFondoItemAmount(item.id, val);
-                if (!ctx.mounted) return;
-                Navigator.pop(ctx);
-                await _loadFondoItems();
-              }
+              final name = nameCtrl.text.trim();
+              final val = double.tryParse(amountCtrl.text.trim());
+              if (name.isEmpty || val == null || val <= 0) return;
+              Navigator.pop(ctx);
+              await DatabaseService.addPartida(
+                  name: name, amount: val);
+              await _cargarPartidas();
             },
-            child: const Text('Guardar'),
+            child: const Text('Agregar'),
           ),
         ],
       ),
@@ -478,17 +709,13 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
   }
 
   Widget _buildFixedExpensesPreview() {
-    final fixedExpenses = DatabaseService.getAllFixedExpenses();
-    if (fixedExpenses.isEmpty) {
-      return SizedBox.shrink();
-    }
-
-    // Ordenar por dueDay
-    final sorted = fixedExpenses.where((e) => e.isActive).toList()
+    final sorted = DatabaseService.getAllFixedExpenses()
+        .where((e) => e.isActive)
+        .toList()
       ..sort((a, b) => a.dueDay.compareTo(b.dueDay));
 
     if (sorted.isEmpty) {
-      return SizedBox.shrink();
+      return const SizedBox.shrink();
     }
 
     final currentMonth = DateTime.now();
@@ -499,26 +726,7 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
       headerLabel: 'Gastos Fijos Mensuales',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (sorted.isEmpty)
-            Row(
-              children: [
-                Icon(Icons.check_circle_outline_rounded,
-                    color: RefugioTheme.textMuted, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  'Sin gastos fijos registrados',
-                  style: TextStyle(
-                    fontFamily: RefugioTheme.fontFamily,
-                    fontSize: 13,
-                    color: RefugioTheme.textMuted,
-                  ),
-                ),
-              ],
-            )
-          else
-            Column(
-              children: sorted.map((expense) {
+        children: sorted.map((expense) {
                 // Verificar si fue pagado este mes
                 final payments = DatabaseService.getAllFixedExpensePayments(expense.id);
                 final paidThisMonth = payments
@@ -646,8 +854,6 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
                   ),
                 );
               }).toList(),
-            ),
-        ],
       ),
     );
   }
@@ -689,6 +895,75 @@ class _CentroDeMandoScreenState extends State<CentroDeMandoScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildBudgetBreakdown(int needsPct, int wantsPct, int savingsPct) {
+    final monthly = DatabaseService.getCurrentMonthSummary();
+    final totalIncome = monthly.incomes;
+
+    return RefugioCard(
+      headerLabel: 'Distribución del Ingreso',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Así se divide tu dinero (${DatabaseService.getFrequencyLabel().toLowerCase()})',
+            style: RefugioTextStyles.label,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              _buildBudgetTile('Necesidades', needsPct, RefugioTheme.amber,
+                  totalIncome > 0 ? totalIncome * needsPct / 100 : null),
+              const SizedBox(width: 8),
+              _buildBudgetTile('Gastos', wantsPct, RefugioTheme.primary,
+                  totalIncome > 0 ? totalIncome * wantsPct / 100 : null),
+              const SizedBox(width: 8),
+              _buildBudgetTile('Ahorro/Deudas', savingsPct, RefugioTheme.cobalt,
+                  totalIncome > 0 ? totalIncome * savingsPct / 100 : null),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBudgetTile(String label, int pct, Color color, double? amount) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$pct%',
+              style: RefugioTextStyles.heading.copyWith(
+                fontSize: 18,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(label, style: RefugioTextStyles.label.copyWith(fontSize: 10)),
+            if (amount != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                _currencyFormat.format(amount),
+                style: RefugioTextStyles.label.copyWith(
+                  fontSize: 10,
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

@@ -26,29 +26,29 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
   final _categories = [
     _CategoryConfig(
       category: DebtCategory.deudaDeHonor,
-      title: 'Compromisos Personales',
-      subtitle: 'Préstamos familiares o amigos — Prioridad alta',
+      title: 'Familia y Amigos',
+      subtitle: 'Dinero prestado por familia o amigos',
       color: RefugioTheme.debtHonor,
       icon: Icons.people_rounded,
     ),
     _CategoryConfig(
       category: DebtCategory.basuraFinanciera,
-      title: 'Pasivos Prioritarios',
-      subtitle: 'Deudas de alto costo — Liquidación estratégica',
+      title: 'Deudas Urgentes',
+      subtitle: 'Deudas de alto costo — Pagar primero',
       color: RefugioTheme.debtBasura,
       icon: Icons.priority_high_rounded,
     ),
     _CategoryConfig(
       category: DebtCategory.lineaEstrategica,
-      title: 'Líneas Estratégicas',
-      subtitle: 'Herramientas de operación — Mantenimiento',
+      title: 'Tarjetas y Créditos',
+      subtitle: 'Tarjetas de crédito y préstamos formales',
       color: RefugioTheme.debtLinea,
-      icon: Icons.build_circle_rounded,
+      icon: Icons.credit_card_rounded,
     ),
     _CategoryConfig(
       category: DebtCategory.laCongeladora,
-      title: 'En Pausa Estratégica',
-      subtitle: 'Sin actividad por ahora — Solo monitoreo',
+      title: 'En Pausa',
+      subtitle: 'Sin pagos activos por ahora — Solo seguimiento',
       color: RefugioTheme.debtCongeladora,
       icon: Icons.pause_circle_rounded,
     ),
@@ -66,12 +66,12 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Plan de Liquidación',
+                  'Mis Deudas',
                   style: RefugioTextStyles.heading.copyWith(fontSize: 24),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Gestión de pasivos y metas',
+                  'Deudas activas y metas de liquidación',
                   style: RefugioTextStyles.label,
                 ),
               ],
@@ -87,13 +87,13 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
               child: ElevatedButton.icon(
                 onPressed: () => _showAddDebtDialog(),
                 icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                label: const Text('Nuevo pasivo'),
+                label: const Text('Nueva deuda'),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () => _showAddDebtDialog(isMeta: true),
+                onPressed: () => _showAddGoalDialog(),
                 icon: const Icon(Icons.flag_rounded, size: 18),
                 label: const Text('Nueva meta'),
               ),
@@ -152,7 +152,7 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
                         color: RefugioTheme.textMuted, size: 16),
                     const SizedBox(width: 8),
                     Text(
-                      'Sin pasivos en esta categoría',
+                      'Sin deudas en esta categoría',
                       style: TextStyle(
                         fontFamily: RefugioTheme.fontFamily,
                         fontSize: 13,
@@ -233,30 +233,31 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
                   itemBuilder: (context) {
                     final hasPlan = DatabaseService.getDebtWeeklyPlan(debt.id) != null;
                     return [
-                    const PopupMenuItem(
-                      value: 'split',
-                      child: Text('Dividir en pagos semanales', style: TextStyle(
-                        fontFamily: RefugioTheme.fontFamily,
-                        fontSize: 13,
-                      )),
-                    ),
-                    if (hasPlan)
+                      if (!isPaused)
+                        const PopupMenuItem(
+                          value: 'split',
+                          child: Text('Dividir en pagos semanales', style: TextStyle(
+                            fontFamily: RefugioTheme.fontFamily,
+                            fontSize: 13,
+                          )),
+                        ),
+                      if (!isPaused && hasPlan)
+                        const PopupMenuItem(
+                          value: 'remove_split',
+                          child: Text('Quitar plan semanal', style: TextStyle(
+                            fontFamily: RefugioTheme.fontFamily,
+                            fontSize: 13,
+                          )),
+                        ),
                       const PopupMenuItem(
-                        value: 'remove_split',
-                        child: Text('Quitar plan semanal', style: TextStyle(
+                        value: 'delete',
+                        child: Text('Eliminar', style: TextStyle(
                           fontFamily: RefugioTheme.fontFamily,
                           fontSize: 13,
+                          color: RefugioTheme.salmon,
                         )),
                       ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Text('Eliminar', style: TextStyle(
-                        fontFamily: RefugioTheme.fontFamily,
-                        fontSize: 13,
-                        color: RefugioTheme.salmon,
-                      )),
-                    ),
-                  ];
+                    ];
                   },
                 ),
               ],
@@ -281,7 +282,7 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Restante', style: RefugioTextStyles.label),
+                    Text('Falta pagar', style: RefugioTextStyles.label),
                     Text(
                       _currencyFormat.format(debt.remainingAmount),
                       style: RefugioTextStyles.moneyMedium.copyWith(fontSize: 18),
@@ -343,7 +344,7 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'En pausa — solo monitoreo, no afecta tu flujo semanal',
+                        'En pausa — sin pagos activos por ahora',
                         style: TextStyle(
                           fontFamily: RefugioTheme.fontFamily,
                           fontSize: 11,
@@ -612,7 +613,7 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
     );
   }
 
-  void _showAddDebtDialog({bool isMeta = false}) {
+  void _showAddDebtDialog() {
     final nameController = TextEditingController();
     final descController = TextEditingController();
     final amountController = TextEditingController();
@@ -624,16 +625,16 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(isMeta ? 'Nueva meta de ahorro' : 'Nuevo pasivo'),
+          title: const Text('Nueva deuda'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: isMeta ? 'Nombre de la meta' : 'Nombre del pasivo',
-                    hintText: isMeta ? 'Ej: Fondo de emergencia' : 'Ej: Papá, Kueski...',
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre de la deuda',
+                    hintText: 'Ej: Papá, tarjeta, Kueski...',
                   ),
                   style: TextStyle(
                     fontFamily: RefugioTheme.fontFamily,
@@ -661,8 +662,8 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
                   ],
-                  decoration: InputDecoration(
-                    labelText: isMeta ? 'Monto objetivo' : 'Monto total',
+                  decoration: const InputDecoration(
+                    labelText: 'Monto total',
                     prefixText: '\$ ',
                     suffixText: 'MXN',
                   ),
@@ -673,61 +674,41 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                if (!isMeta) ...[
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<DebtCategory>(
-                    initialValue: selectedCategory,
-                    decoration: const InputDecoration(
-                      labelText: 'Categoría',
-                    ),
-                    dropdownColor: RefugioTheme.surface,
-                    items: DebtCategory.values.map((cat) {
-                      return DropdownMenuItem(
-                        value: cat,
-                        child: Text(
-                          _categoryLabel(cat),
-                          style: TextStyle(
-                            fontFamily: RefugioTheme.fontFamily,
-                            fontSize: 13,
-                            color: RefugioTheme.textPrimary,
-                          ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<DebtCategory>(
+                  initialValue: selectedCategory,
+                  decoration: const InputDecoration(labelText: 'Categoría'),
+                  dropdownColor: RefugioTheme.surface,
+                  items: DebtCategory.values.map((cat) {
+                    return DropdownMenuItem(
+                      value: cat,
+                      child: Text(
+                        _categoryLabel(cat),
+                        style: TextStyle(
+                          fontFamily: RefugioTheme.fontFamily,
+                          fontSize: 13,
+                          color: RefugioTheme.textPrimary,
                         ),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => selectedCategory = val);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  if (selectedCategory != DebtCategory.laCongeladora)
-                    TextField(
-                      controller: monthlyController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-                      ],
-                      decoration: const InputDecoration(
-                        labelText: 'Pago mensual (opcional)',
-                        prefixText: '\$ ',
                       ),
-                      style: TextStyle(
-                        fontFamily: RefugioTheme.fontFamily,
-                        fontSize: 14,
-                        color: RefugioTheme.textPrimary,
-                      ),
-                    ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => selectedCategory = val);
+                    }
+                  },
+                ),
+                if (selectedCategory != DebtCategory.laCongeladora) ...[
                   const SizedBox(height: 12),
                   TextField(
-                    controller: interestController,
+                    controller: monthlyController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
                     ],
                     decoration: const InputDecoration(
-                      labelText: 'Tasa de interés % (opcional)',
-                      suffixText: '%',
+                      labelText: 'Pago mensual (opcional)',
+                      prefixText: '\$ ',
                     ),
                     style: TextStyle(
                       fontFamily: RefugioTheme.fontFamily,
@@ -736,6 +717,23 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: interestController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Tasa de interés % (opcional)',
+                    suffixText: '%',
+                  ),
+                  style: TextStyle(
+                    fontFamily: RefugioTheme.fontFamily,
+                    fontSize: 14,
+                    color: RefugioTheme.textPrimary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -761,7 +759,7 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
                       title: const Text('Atención'),
                       content: Text(
                         'Tasa del ${interest.toStringAsFixed(1)}% detectada.\n\n'
-                        'Esto se clasifica como pasivo prioritario por su alto costo.\n'
+                        'Esto se clasifica como deuda urgente por su alto costo.\n'
                         '¿Confirmar registro?',
                         style: RefugioTextStyles.alertSalmon,
                       ),
@@ -789,7 +787,7 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
                 await DatabaseService.addDebt(
                   name: name,
                   description: descController.text.trim(),
-                  category: isMeta ? DebtCategory.lineaEstrategica : selectedCategory,
+                  category: selectedCategory,
                   totalAmount: amount,
                   monthlyPayment: double.tryParse(monthlyController.text.trim()) ?? 0,
                   interestRate: interest,
@@ -802,6 +800,104 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showAddGoalDialog() {
+    final nameController = TextEditingController();
+    final descController = TextEditingController();
+    final amountController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Nueva meta de ahorro'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre de la meta',
+                  hintText: 'Ej: Fondo de emergencia, Viaje...',
+                ),
+                autofocus: true,
+                style: TextStyle(
+                  fontFamily: RefugioTheme.fontFamily,
+                  fontSize: 14,
+                  color: RefugioTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descController,
+                decoration: const InputDecoration(
+                  labelText: 'Descripción (opcional)',
+                ),
+                style: TextStyle(
+                  fontFamily: RefugioTheme.fontFamily,
+                  fontSize: 14,
+                  color: RefugioTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                ],
+                decoration: const InputDecoration(
+                  labelText: 'Monto objetivo (opcional)',
+                  hintText: '0 = sin meta fija',
+                  prefixText: '\$ ',
+                  suffixText: 'MXN',
+                ),
+                style: TextStyle(
+                  fontFamily: RefugioTheme.fontFamily,
+                  fontSize: 18,
+                  color: RefugioTheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar', style: TextStyle(color: RefugioTheme.textMuted)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
+              final target = double.tryParse(amountController.text.trim()) ?? 0;
+              final messenger = ScaffoldMessenger.of(context);
+              Navigator.pop(dialogContext);
+              await DatabaseService.createSavingsFund(
+                name: name,
+                type: 'ahorro',
+                targetAmount: target,
+                description: descController.text.trim().isNotEmpty
+                    ? descController.text.trim()
+                    : null,
+              );
+              if (!mounted) return;
+              setState(() {});
+              widget.onPaymentMade?.call();
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text('Meta creada — encuéntrala en la sección Fondos de Ahorro'),
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            },
+            child: const Text('Crear meta'),
+          ),
+        ],
       ),
     );
   }
@@ -918,7 +1014,7 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Confirmar eliminación'),
         content: Text(
-          '¿Eliminar "${debt.name}" de tus pasivos?',
+          '¿Eliminar "${debt.name}" de tus deudas?',
           style: RefugioTextStyles.body,
         ),
         actions: [
@@ -947,13 +1043,13 @@ class _FrentesDeBatallaScreenState extends State<FrentesDeBatallaScreen> {
   String _categoryLabel(DebtCategory cat) {
     switch (cat) {
       case DebtCategory.deudaDeHonor:
-        return 'Compromiso Personal';
+        return 'Familia o Amigos';
       case DebtCategory.lineaEstrategica:
-        return 'Línea Estratégica';
+        return 'Tarjeta o Crédito';
       case DebtCategory.basuraFinanciera:
-        return 'Pasivo Prioritario';
+        return 'Deuda Urgente';
       case DebtCategory.laCongeladora:
-        return 'En Pausa Estratégica';
+        return 'En Pausa';
     }
   }
 }

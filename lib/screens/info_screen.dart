@@ -34,12 +34,12 @@ class _InfoScreenState extends State<InfoScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Info Financiera',
+            'Finanzas',
             style: RefugioTextStyles.heading.copyWith(fontSize: 24),
           ),
           const SizedBox(height: 4),
           Text(
-            'Pendientes, gastos fijos y balance mensual',
+            'Pendientes, gastos fijos e historial mes a mes',
             style: RefugioTextStyles.label,
           ),
           const SizedBox(height: 20),
@@ -48,6 +48,8 @@ class _InfoScreenState extends State<InfoScreen> {
           _buildFixedExpensesSection(fixedExpenses),
           const SizedBox(height: 16),
           _buildMonthlyBalanceSection(monthly),
+          const SizedBox(height: 16),
+          _buildMonthlyHistory(),
           const SizedBox(height: 32),
         ],
       ),
@@ -213,12 +215,12 @@ class _InfoScreenState extends State<InfoScreen> {
 
     return RefugioCard(
       borderColor: resultPositive ? RefugioTheme.primary : RefugioTheme.salmon,
-      headerLabel: 'Balance Mensual',
+      headerLabel: 'Balance de Este Mes',
       child: Column(
         children: [
           _buildSummaryRow('Ingresos', summary.incomes, RefugioTheme.primary),
           const SizedBox(height: 6),
-          _buildSummaryRow('Pagos a pasivos', -summary.debtPayments, RefugioTheme.salmon),
+          _buildSummaryRow('Pago de deudas', -summary.debtPayments, RefugioTheme.salmon),
           const SizedBox(height: 6),
           _buildSummaryRow('Gastos fijos pagados', -summary.fixedExpenses, RefugioTheme.amber),
           const SizedBox(height: 6),
@@ -254,6 +256,69 @@ class _InfoScreenState extends State<InfoScreen> {
       ],
     );
   }
+
+  Widget _buildMonthlyHistory() {
+    final now = DateTime.now();
+    final months = DatabaseService.getMonthsWithData()
+        .where((m) => !(m.year == now.year && m.month == now.month))
+        .take(11)
+        .toList();
+
+    if (months.isEmpty) return const SizedBox.shrink();
+
+    final monthFmt = DateFormat('MMMM yyyy', 'es');
+
+    return RefugioCard(
+      borderColor: RefugioTheme.cobalt,
+      headerLabel: 'Historial por Mes',
+      child: Column(
+        children: months.map((month) {
+          final summary = DatabaseService.getMonthSummaryByDate(month.year, month.month);
+          final positive = summary.cashResult >= 0;
+          return Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _capitalize(monthFmt.format(month)),
+                      style: RefugioTextStyles.body.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${positive ? '+' : ''}${_currencyFormat.format(summary.cashResult)}',
+                    style: RefugioTextStyles.body.copyWith(
+                      color: positive ? RefugioTheme.primary : RefugioTheme.salmon,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+              children: [
+                _buildSummaryRow('Ingresos', summary.incomes, RefugioTheme.primary),
+                const SizedBox(height: 4),
+                _buildSummaryRow('Pago de deudas', -summary.debtPayments, RefugioTheme.salmon),
+                const SizedBox(height: 4),
+                _buildSummaryRow('Gastos fijos', -summary.fixedExpenses, RefugioTheme.amber),
+                const SizedBox(height: 4),
+                _buildSummaryRow('Ahorro neto', -summary.savingsNet, RefugioTheme.cobalt),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
   void _showAddFixedExpenseDialog() {
     final nameCtrl = TextEditingController();

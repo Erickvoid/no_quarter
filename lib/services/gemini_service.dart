@@ -1,7 +1,6 @@
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'database_service.dart';
 import '../models/debt.dart';
-import '../models/constants.dart';
 
 class GeminiService {
   static GenerativeModel? _model;
@@ -9,8 +8,6 @@ class GeminiService {
 
   static const List<String> _modelCandidates = [
     'gemini-3-flash-preview',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash-latest',
   ];
 
   static void initialize(String apiKey) {
@@ -26,19 +23,23 @@ class GeminiService {
   /// Construye el contexto financiero actual del usuario
   static String _buildFinancialContext() {
     final saldo = DatabaseService.getSaldoTotal();
-    final capitalLibre = DatabaseService.getMunicionLibreTotal();
-    final fondoIntocable = DatabaseService.getBloqueDeTitanioThisWeek();
-    final fondoAsegurado = DatabaseService.isTitaniumSecured();
+    final disponible = DatabaseService.getMunicionLibreTotal();
+    final necesidades = DatabaseService.getFondoIntocableThisPeriod();
+    final necesidadesCubiertas = DatabaseService.isFondoAsegurado();
     final totalDebt = DatabaseService.getTotalDebtRemaining();
     final totalSavings = DatabaseService.getTotalSavingsBalance();
     final fixedExpenses = DatabaseService.getAllFixedExpenses();
     final pendingItems = DatabaseService.getPendingInfoItems();
     final monthly = DatabaseService.getCurrentMonthSummary();
 
-    final debtHonor = DatabaseService.getTotalDebtByCategory(DebtCategory.deudaDeHonor);
-    final debtLinea = DatabaseService.getTotalDebtByCategory(DebtCategory.lineaEstrategica);
-    final debtBasura = DatabaseService.getTotalDebtByCategory(DebtCategory.basuraFinanciera);
-    final debtCongeladora = DatabaseService.getTotalDebtByCategory(DebtCategory.laCongeladora);
+    final needsPct = DatabaseService.getNeedsPercent();
+    final wantsPct = DatabaseService.getWantsPercent();
+    final savingsPct = DatabaseService.getSavingsPercent();
+
+    final debtFamilia = DatabaseService.getTotalDebtByCategory(DebtCategory.deudaDeHonor);
+    final debtTarjetas = DatabaseService.getTotalDebtByCategory(DebtCategory.lineaEstrategica);
+    final debtUrgente = DatabaseService.getTotalDebtByCategory(DebtCategory.basuraFinanciera);
+    final debtPausa = DatabaseService.getTotalDebtByCategory(DebtCategory.laCongeladora);
 
     final fixedTotal = fixedExpenses.fold<double>(0.0, (sum, e) => sum + e.amount);
     final fixedPaidCount = fixedExpenses
@@ -52,34 +53,37 @@ class GeminiService {
       .where((item) => item.kind == PendingKind.fixedExpense)
       .fold<double>(0.0, (sum, item) => sum + item.amount);
 
+    final bankName = DatabaseService.getBankName();
+    final frequencyLabel = DatabaseService.getFrequencyLabel();
+
     return '''
-── Resumen Financiero ──
-Saldo Total BBVA: \$${saldo.toStringAsFixed(2)} MXN
-Fondo Intocable: \$${fondoIntocable.toStringAsFixed(2)} / \$${FinancialConstants.bloqueDeTitanio.toStringAsFixed(2)} MXN [${fondoAsegurado ? "Asegurado ✓" : "Incompleto ⚠"}]
-Capital Libre: \$${capitalLibre.toStringAsFixed(2)} MXN
-  Fondos de Ahorro/Inversión: \$${totalSavings.toStringAsFixed(2)} MXN
+── Resumen Financiero ($frequencyLabel) ──
+Saldo Total $bankName: \$${saldo.toStringAsFixed(2)} MXN
+Necesidades del Hogar ($needsPct%): \$${necesidades.toStringAsFixed(2)} MXN [${necesidadesCubiertas ? "Cubiertas ✓" : "Pendiente ⚠"}]
+Disponible ($wantsPct% gastos + $savingsPct% ahorro/deudas): \$${disponible.toStringAsFixed(2)} MXN
+Fondos de Ahorro/Inversión: \$${totalSavings.toStringAsFixed(2)} MXN
 
-── Estructura de Pasivos (Total: \$${totalDebt.toStringAsFixed(2)} MXN) ──
-• Compromisos Personales: \$${debtHonor.toStringAsFixed(2)} MXN
-• Líneas Estratégicas: \$${debtLinea.toStringAsFixed(2)} MXN
-• Pasivos Prioritarios: \$${debtBasura.toStringAsFixed(2)} MXN
-• En Pausa Estratégica: \$${debtCongeladora.toStringAsFixed(2)} MXN
+── Deudas (Total: \$${totalDebt.toStringAsFixed(2)} MXN) ──
+• Familia y Amigos: \$${debtFamilia.toStringAsFixed(2)} MXN
+• Tarjetas y Créditos: \$${debtTarjetas.toStringAsFixed(2)} MXN
+• Deudas Urgentes: \$${debtUrgente.toStringAsFixed(2)} MXN
+• En Pausa: \$${debtPausa.toStringAsFixed(2)} MXN
 
-  ── Gastos Fijos Mensuales ──
-  • Registrados: ${fixedExpenses.length}
-  • Monto mensual comprometido: \$${fixedTotal.toStringAsFixed(2)} MXN
-  • Pagados este mes: $fixedPaidCount/${fixedExpenses.length}
+── Gastos Fijos Mensuales ──
+• Registrados: ${fixedExpenses.length}
+• Monto mensual comprometido: \$${fixedTotal.toStringAsFixed(2)} MXN
+• Pagados este mes: $fixedPaidCount/${fixedExpenses.length}
 
-  ── Pendientes Operativos ──
-  • Pago semanal pendiente: \$${pendingWeekly.toStringAsFixed(2)} MXN
-  • Gastos fijos pendientes: \$${pendingFixed.toStringAsFixed(2)} MXN
+── Pendientes ──
+• Pago semanal pendiente: \$${pendingWeekly.toStringAsFixed(2)} MXN
+• Gastos fijos pendientes: \$${pendingFixed.toStringAsFixed(2)} MXN
 
-  ── Resultado Mensual (acumulado) ──
-  • Ingresos: \$${monthly.incomes.toStringAsFixed(2)} MXN
-  • Pagos a pasivos: \$${monthly.debtPayments.toStringAsFixed(2)} MXN
-  • Gastos fijos pagados: \$${monthly.fixedExpenses.toStringAsFixed(2)} MXN
-  • Ahorro/Inversión neta: \$${monthly.savingsNet.toStringAsFixed(2)} MXN
-  • Resultado de caja: \$${monthly.cashResult.toStringAsFixed(2)} MXN
+── Resultado Mensual (acumulado) ──
+• Ingresos: \$${monthly.incomes.toStringAsFixed(2)} MXN
+• Pago de deudas: \$${monthly.debtPayments.toStringAsFixed(2)} MXN
+• Gastos fijos pagados: \$${monthly.fixedExpenses.toStringAsFixed(2)} MXN
+• Ahorro/Inversión neta: \$${monthly.savingsNet.toStringAsFixed(2)} MXN
+• Resultado de caja: \$${monthly.cashResult.toStringAsFixed(2)} MXN
 ''';
   }
 
@@ -92,15 +96,15 @@ Capital Libre: \$${capitalLibre.toStringAsFixed(2)} MXN
     final context = _buildFinancialContext();
 
     final prompt = '''
-Eres el Asesor Financiero Privado de la app "Refugio".
-Tu objetivo máximo es garantizar la paz mental del usuario y asegurar su "Fondo Intocable" (que incluye su comida, gasolina y el bienestar de sus 6 mascotas: Otilio, Tadea, Archivaldo, Alfredito, Chocolata y Griselda).
-Habla en español de México, con un tono extremadamente sereno, empático, objetivo y profesional. Cero lenguaje militar.
+Eres el Asesor Financiero de la app familiar "Refugio".
+Tu objetivo es garantizar el bienestar financiero de la familia y proteger el presupuesto de Necesidades del Hogar.
+Habla en español de México, con un tono sereno, empático, objetivo y profesional.
 Tu lenguaje debe transmitir que todo está bajo control.
 
 REGLAS:
-1. El "Fondo Intocable" (\$2,810 MXN) NO SE TOCA. Cubre gasolina, despensa, apoyo a su mamá y el cuidado de sus mascotas.
-2. Solo el "Capital Libre" está disponible para gastos discrecionales, compras o liquidación de pasivos.
-3. Si un gasto compromete el Fondo Intocable, es NO RECOMENDADO — proteger la tranquilidad es prioridad.
+1. Las "Necesidades del Hogar" (gastos esenciales como despensa, servicios y transporte) tienen prioridad absoluta — no se tocan.
+2. Solo el dinero "Disponible" puede usarse para gastos discrecionales, compras o pago de deudas adicionales.
+3. Si un gasto compromete las Necesidades del Hogar, es NO RECOMENDADO.
 4. Siempre cierra con un veredicto claro: VIABLE / REQUIERE AJUSTE / NO RECOMENDADO.
 5. Máximo 150 palabras. Sé claro, cálido y directo.
 
